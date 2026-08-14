@@ -55,7 +55,9 @@ export async function uploadToStorage(bucket: string, path: string, buffer: Buff
       Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
       "Content-Type": contentType,
     },
-    body: buffer,
+    // TS não aceita Buffer diretamente como BodyInit do fetch (mesmo sendo
+    // idêntico em runtime) — view Uint8Array sem copiar os bytes.
+    body: new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
