@@ -45,3 +45,7 @@ next-env.d.ts
 /playwright-report/
 /blob-report/
 /playwright/.cache/
+
+# artefatos de sincronização (zips temporários usados para transferir código)
+_claude_*.zip
+_to_delete/
