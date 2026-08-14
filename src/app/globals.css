@@ -1,0 +1,51 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f8fafc;
+  --foreground: #0f172a;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  /* Marca Trevo — sobrescreve a escala "indigo" do Tailwind com o roxo da
+     marca (extraído do print de referência: gradiente do sidebar vai de
+     #8B42FF no topo a #6518E5 na base). Como o app inteiro já usa "indigo"
+     como única cor de destaque (botões, links, item ativo do menu), isso
+     rebrandeia o sistema todo sem precisar editar cada componente. */
+  --color-indigo-50: #f4eeff;
+  --color-indigo-100: #e9dbff;
+  --color-indigo-200: #d2b8ff;
+  --color-indigo-300: #b98bff;
+  --color-indigo-400: #a164fd;
+  --color-indigo-500: #8b42ff;
+  --color-indigo-600: #7c2af5;
+  --color-indigo-700: #6518e5;
+  --color-indigo-800: #5012b8;
+  --color-indigo-900: #3d0d8f;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+/* Rótulo obrigatório e não-dispensável para conteúdo de simulação de IA —
+   ver seção 13/14 da especificação. Nunca deve ser removido ou minimizado. */
+.simulation-banner {
+  @apply rounded-lg border-2 border-amber-400 bg-amber-50 px-4 py-3 text-sm text-amber-900;
+}
+
+.origin-badge-real {
+  @apply inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-800;
+}
+.origin-badge-inference {
+  @apply inline-flex items-center gap-1 rounded-full bg-sky-100 px-2.5 py-0.5 text-xs font-medium text-sky-800;
+}
+.origin-badge-simulation {
+  @apply inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-900 ring-1 ring-amber-400;
+}
