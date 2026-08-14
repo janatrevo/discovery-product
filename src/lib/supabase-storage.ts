@@ -55,9 +55,12 @@ export async function uploadToStorage(bucket: string, path: string, buffer: Buff
       Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
       "Content-Type": contentType,
     },
-    // TS não aceita Buffer diretamente como BodyInit do fetch (mesmo sendo
-    // idêntico em runtime) — view Uint8Array sem copiar os bytes.
-    body: new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength),
+    // Buffer (e até a view Uint8Array dele) funciona perfeitamente como corpo
+    // de fetch em runtime no Node — o conflito é só entre as versões dos
+    // tipos do Node e do DOM/fetch do TypeScript (arrays tipados genéricos
+    // desde o TS 5.7), sem nenhum efeito real. Cast explícito documenta isso
+    // em vez de tentar mais uma conversão "correta" que o checador rejeite.
+    body: buffer as unknown as BodyInit,
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
