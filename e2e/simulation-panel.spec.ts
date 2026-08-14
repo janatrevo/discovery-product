@@ -4,7 +4,7 @@ import { signup, uniqueEmail, fieldByLabel } from "./helpers";
 test("painel multi-persona: personas lado a lado, síntese de divergência, e rótulo de simulação sempre presente", async ({
   page,
 }) => {
-  test.setTimeout(90_000);
+  test.setTimeout(150_000);
   const email = uniqueEmail("owner-sim");
   await signup(page, { name: "QA Sim Owner", email, password: "SenhaForte123", orgName: "QA Sim Org" });
 
@@ -30,7 +30,11 @@ test("painel multi-persona: personas lado a lado, síntese de divergência, e r�
   await fieldByLabel(page, "Tarefa").fill("Agendar a consulta e entender o valor cobrado.");
   await page.getByRole("button", { name: "Rodar simulação exploratória" }).click();
 
-  await expect(page).toHaveURL(/\/simulations\/[0-9a-f-]{36}/, { timeout: 30_000 });
+  // Com a IA real ativada (não mock), a rodada faz 2 chamadas de IA em
+  // paralelo (uma por persona) + 1 chamada de síntese sequencial depois —
+  // e o modelo "pensa" antes de responder, então isso pode levar bem mais
+  // que os 30s originais (pensados para o modo demo/mock, quase instantâneo).
+  await expect(page).toHaveURL(/\/simulations\/[0-9a-f-]{36}/, { timeout: 100_000 });
 
   // Regra de governança inegociável do produto: simulação de IA nunca pode
   // aparecer sem o rótulo deixando claro que não é evidência real — uma

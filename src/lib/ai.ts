@@ -34,7 +34,11 @@ async function callGemini(opts: {
       contents: [{ role: "user", parts: opts.parts }],
       systemInstruction: { parts: [{ text: opts.system }] },
       generationConfig: {
-        maxOutputTokens: opts.maxTokens ?? 1200,
+        // Modelos mais novos "pensam" antes de responder e esse raciocínio
+        // consome do mesmo limite de tokens da resposta — sem uma margem
+        // generosa, o JSON final pode sair cortado no meio (detectado e
+        // rejeitado por parseJsonResponse, nunca aceito incompleto).
+        maxOutputTokens: opts.maxTokens ?? 3000,
         ...(opts.jsonMode ? { responseMimeType: "application/json" } : {}),
       },
     }),
@@ -179,7 +183,7 @@ export async function simulatePersonaScenario(
       "Você está simulando exploratoriamente como UMA PERSONA especifica reagiria a um produto/cenário, para ajudar um time de produto a levantar hipóteses a investigar com pesquisa real. Isto é uma simulação, não um teste com usuário real — nunca afirme fatos de mercado, apenas explore a perspectiva da persona com base no perfil dado. Responda APENAS com um objeto JSON com as chaves: expectations, understanding, doubts, trust_signals, distrust_signals, objections (array), frustrations (array), usage_intent, purchase_intent, barriers (array), relevant_features (array), unnecessary_features (array).",
     prompt: `Persona: ${persona.name}\nDescrição: ${persona.shortDescription ?? ""}\nJTBD: ${persona.jtbdMain ?? ""}\nDores conhecidas: ${(persona.pains ?? []).join(", ")}\nObjetivos: ${(persona.goals ?? []).join(", ")}\nFamiliaridade tecnológica: ${persona.techFamiliarity ?? "desconhecida"}\nTom de linguagem: ${persona.characteristicLanguage ?? "neutro"}\n\nProduto/conceito: ${productDescription}\n\nCenário: ${scenario}\n\nTarefa: ${task}`,
     mock,
-    maxTokens: 1200,
+    maxTokens: 3000,
   });
 }
 
@@ -216,11 +220,10 @@ export async function analyzeUsabilityImage(
           text: `Persona: ${persona.name} — ${persona.shortDescription ?? ""}\nFamiliaridade tecnológica: ${persona.techFamiliarity ?? "desconhecida"}\nCenário: ${scenario}\nTarefa: ${task}`,
         },
       ],
-      maxTokens: 1200,
+      maxTokens: 3000,
       jsonMode: true,
     });
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : mock;
+    const parsed = parseJsonResponse<typeof mock>(text);
     return { data: parsed, isMock: false, modelVersion: GEMINI_MODEL };
   } catch (err) {
     console.error("Erro na análise multimodal, caindo para mock:", err);
@@ -238,7 +241,7 @@ export async function explainConfidence(receiptSummary: string, hypothesisTitle:
       system:
         "Você explica em português, em 2-4 frases, por que um Confidence Score determinístico chegou a um certo valor, citando os fatores do recibo fornecido. Você NUNCA decide ou ajusta o número — apenas explica o que já foi calculado.",
       parts: [{ text: `Hipótese: ${hypothesisTitle}\nRecibo: ${receiptSummary}` }],
-      maxTokens: 400,
+      maxTokens: 1200,
     });
     return { data: text, isMock: false, modelVersion: GEMINI_MODEL };
   } catch (err) {
@@ -274,7 +277,7 @@ export async function synthesizePersonaPanel(panel: PersonaPanelInput[], scenari
       "Você recebe as respostas simuladas de VÁRIAS personas ao mesmo cenário de produto. Compare-as e responda APENAS com um objeto JSON com as chaves: consensus (array de pontos em que as personas convergem), divergence (array de pontos em que elas divergem de forma relevante), segmentation_signal (1-2 frases sobre se essa divergência sugere que talvez sejam segmentos de usuário diferentes, não um único perfil). Baseie-se só no que está nas respostas fornecidas — não invente dados novos sobre as personas.",
     prompt: `Cenário: ${scenario}\nTarefa: ${task}\n\n${panelSummary}`,
     mock,
-    maxTokens: 900,
+    maxTokens: 2200,
   });
 }
 
@@ -318,7 +321,7 @@ export async function detectEvidencePatterns(items: PatternEvidenceInput[]) {
       'Você analisa evidências reais de pesquisa de produto vinculadas a hipóteses DIFERENTES de um mesmo projeto, procurando padrões e temas recorrentes que atravessam mais de uma hipótese — sinais que um time de produto poderia não perceber olhando cada hipótese isoladamente. Responda APENAS com um objeto JSON {"patterns": [{"title": string, "description": string, "relatedHypotheses": string[]}]}. Cada padrão deve citar pelo menos 2 hipóteses diferentes em relatedHypotheses (use o título exato da hipótese fornecido). Baseie-se apenas no conteúdo fornecido — nunca invente evidência que não esteja no texto. Se não houver padrão real cruzando hipóteses, responda com {"patterns": []}.',
     prompt: `Evidências reais do projeto (formato: hipótese, tipo, conteúdo):\n${summary}`,
     mock,
-    maxTokens: 1200,
+    maxTokens: 2500,
   });
 }
 
@@ -383,7 +386,7 @@ export async function draftProductDoc(input: ProductDocInput) {
       'Você ajuda um time de produto a transformar uma oportunidade já validada em discovery em um rascunho de PRD. Baseie-se SOMENTE no problema, hipótese, persona e evidências fornecidos — nunca invente escopo, métricas ou fatos sobre o usuário que não estejam no material dado. Qualquer suposição necessária que não tenha lastro na evidência deve virar uma pergunta em "openQuestions", nunca uma afirmação disfarçada de fato. Responda APENAS com um objeto JSON {"goals": string[], "nonGoals": string[], "openQuestions": string[], "userStories": [{"asA": string, "iWant": string, "soThat": string, "acceptanceCriteria": string[], "priority": "must"|"should"|"could"}]}. Gere de 2 a 6 user stories.',
     prompt: `Oportunidade: ${input.opportunityTitle}\nDescrição: ${input.opportunityDescription}\nProblema observado: ${input.problemRef}\nHipótese de origem: ${input.hypothesisTitle ?? "nenhuma vinculada"}\nPersona: ${input.personaSummary ?? "nenhuma vinculada"}\n\nEvidências reais vinculadas à hipótese:\n${evidenceSummary}`,
     mock,
-    maxTokens: 1600,
+    maxTokens: 3500,
   });
 }
 
