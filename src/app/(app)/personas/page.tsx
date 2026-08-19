@@ -1,17 +1,20 @@
 import Link from "next/link";
 import { getPageContext } from "@/lib/page-context";
 import { db } from "@/db";
-import { personas } from "@/db/schema";
+import { personas, products } from "@/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { Badge, Button, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 
 export default async function PersonasPage() {
   const { project } = await getPageContext();
-  const list = await db
-    .select()
-    .from(personas)
-    .where(eq(personas.projectId, project.id))
-    .orderBy(desc(personas.createdAt));
+  const [list, productList] = await Promise.all([
+    db.select().from(personas).where(eq(personas.projectId, project.id)).orderBy(desc(personas.createdAt)),
+    db.select().from(products).where(eq(products.projectId, project.id)),
+  ]);
+  // Mostrado direto no card — quando o mesmo produto tem várias personas
+  // (ou personas parecidas de produtos diferentes), o nome do produto e o
+  // contexto profissional ajudam a diferenciar sem precisar abrir cada uma.
+  const productName = (id: string | null) => productList.find((p) => p.id === id)?.name;
 
   return (
     <div>
@@ -47,6 +50,12 @@ export default async function PersonasPage() {
                   </Badge>
                 </div>
                 <p className="line-clamp-2 text-sm text-slate-500">{p.shortDescription}</p>
+                {p.productId && (
+                  <p className="mt-2 truncate text-xs text-slate-400">Produto: {productName(p.productId) ?? "—"}</p>
+                )}
+                {p.professionalContext && (
+                  <p className="mt-1 line-clamp-2 text-xs text-slate-400">Contexto profissional: {p.professionalContext}</p>
+                )}
                 <div className="mt-3 h-1.5 w-full rounded-full bg-slate-100">
                   <div
                     className="h-1.5 rounded-full bg-indigo-500"
