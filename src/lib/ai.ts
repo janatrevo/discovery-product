@@ -350,6 +350,11 @@ export type ProductDocDraft = {
   goals: string[];
   nonGoals: string[];
   openQuestions: string[];
+  // Usados ao transformar a oportunidade em Feature no Azure DevOps (ver
+  // sendToAzureDevOps) — regras de negócio que a implementação precisa
+  // respeitar, e métricas que vão dizer se o teste A/B foi bem-sucedido.
+  businessRules: string[];
+  successMetrics: string[];
   userStories: {
     asA: string;
     iWant: string;
@@ -364,6 +369,8 @@ export async function draftProductDoc(input: ProductDocInput) {
     goals: ["[modo demo — sem GEMINI_API_KEY] objetivo ilustrativo, não analisou a oportunidade de verdade."],
     nonGoals: ["Configure GEMINI_API_KEY para um rascunho real baseado na evidência vinculada."],
     openQuestions: ["Qual o critério de sucesso mensurável desta oportunidade?"],
+    businessRules: ["[modo demo] Configure GEMINI_API_KEY para regras de negócio reais baseadas na oportunidade."],
+    successMetrics: ["[modo demo] Configure GEMINI_API_KEY para métricas de sucesso reais."],
     userStories: [
       {
         asA: "usuário",
@@ -383,7 +390,7 @@ export async function draftProductDoc(input: ProductDocInput) {
 
   return callStructured({
     system:
-      'Você ajuda um time de produto a transformar uma oportunidade já validada em discovery em um rascunho de PRD. Baseie-se SOMENTE no problema, hipótese, persona e evidências fornecidos — nunca invente escopo, métricas ou fatos sobre o usuário que não estejam no material dado. Qualquer suposição necessária que não tenha lastro na evidência deve virar uma pergunta em "openQuestions", nunca uma afirmação disfarçada de fato. Responda APENAS com um objeto JSON {"goals": string[], "nonGoals": string[], "openQuestions": string[], "userStories": [{"asA": string, "iWant": string, "soThat": string, "acceptanceCriteria": string[], "priority": "must"|"should"|"could"}]}. Gere de 2 a 6 user stories.',
+      'Você ajuda um time de produto a transformar uma oportunidade já validada em discovery em um rascunho de PRD. Baseie-se SOMENTE no problema, hipótese, persona e evidências fornecidos — nunca invente escopo, métricas ou fatos sobre o usuário que não estejam no material dado. Qualquer suposição necessária que não tenha lastro na evidência deve virar uma pergunta em "openQuestions", nunca uma afirmação disfarçada de fato. "businessRules" são regras de negócio objetivas que a implementação precisa respeitar (ex.: limites, permissões, condições) — só inclua as que decorrem logicamente do problema/hipótese/evidência, e deixe vazio se não houver nenhuma clara. "successMetrics" são métricas mensuráveis para avaliar, ao fim de um teste A/B, se esta funcionalidade deve ser mantida permanentemente ou removida — sempre relacionadas à hipótese/evidência de origem, nunca genéricas. Responda APENAS com um objeto JSON {"goals": string[], "nonGoals": string[], "openQuestions": string[], "businessRules": string[], "successMetrics": string[], "userStories": [{"asA": string, "iWant": string, "soThat": string, "acceptanceCriteria": string[], "priority": "must"|"should"|"could"}]}. Gere de 2 a 6 user stories.',
     prompt: `Oportunidade: ${input.opportunityTitle}\nDescrição: ${input.opportunityDescription}\nProblema observado: ${input.problemRef}\nHipótese de origem: ${input.hypothesisTitle ?? "nenhuma vinculada"}\nPersona: ${input.personaSummary ?? "nenhuma vinculada"}\n\nEvidências reais vinculadas à hipótese:\n${evidenceSummary}`,
     mock,
     maxTokens: 3500,

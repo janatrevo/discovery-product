@@ -8,6 +8,37 @@ import { recomputeHypothesis } from "@/lib/recompute-hypothesis";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
+// Usado a partir da tela de Persona (ver checkPersonaDeletable em
+// src/lib/delete-guards.ts) quando um experimento é uma das razões que
+// bloqueiam a exclusão da persona — desvincula sem apagar o experimento em
+// si (personaId é opcional aqui, então isso não perde nenhum dado do
+// experimento, só solta a referência).
+export async function unlinkPersonaFromExperiment(experimentId: string, personaId: string) {
+  const { role } = await getPageContext();
+  if (role !== "owner" && role !== "editor") throw new Error("Sem permissão.");
+  await db.update(experiments).set({ personaId: null }).where(eq(experiments.id, experimentId));
+  revalidatePath(`/experiments/${experimentId}`);
+  revalidatePath(`/personas/${personaId}`);
+}
+
+// Usado a partir da tela de Hipótese quando um experimento é uma das razões
+// que bloqueiam a exclusão (ver checkHypothesisDeletable) — diferente de
+// persona/oportunidade, experiments.hypothesisId é obrigatório (NOT NULL,
+// ver src/db/schema.ts), então não dá pra "desvincular": a única forma de
+// liberar a exclusão da hipótese é excluir o experimento inteiro. Nenhuma
+// outra tabela referencia experiments.id via foreign key, então isso é
+// seguro (não deixa nada órfão).
+export async function deleteExperiment(experimentId: string, redirectTo?: string) {
+  const { role } = await getPageContext();
+  if (role !== "owner" && role !== "editor") throw new Error("Sem permissão para excluir experimentos.");
+  const [exp] = await db.select().from(experiments).where(eq(experiments.id, experimentId)).limit(1);
+  if (!exp) throw new Error("Experimento não encontrado.");
+  await db.delete(experiments).where(eq(experiments.id, experimentId));
+  revalidatePath(`/hypotheses/${exp.hypothesisId}`);
+  revalidatePath(`/hypotheses/${exp.hypothesisId}`, "layout");
+  if (redirectTo) redirect(redirectTo);
+}
+
 export async function createExperiment(hypothesisId: string, formData: FormData) {
   const { user, project, role } = await getPageContext();
   if (role === "viewer") throw new Error("Sem permissão.");

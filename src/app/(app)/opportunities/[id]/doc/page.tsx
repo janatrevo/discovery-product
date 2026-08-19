@@ -17,6 +17,7 @@ import {
   Textarea,
 } from "@/components/ui/primitives";
 import { arrayToLines } from "@/lib/list-utils";
+import { featureWebUrl } from "@/lib/azure-devops";
 import {
   generateProductDoc,
   updateProductDoc,
@@ -25,6 +26,7 @@ import {
   confirmUserStory,
   toggleStoryDone,
   deleteUserStory,
+  sendToAzureDevOps,
 } from "./actions";
 
 const PRIORITY_LABELS: Record<string, string> = {
@@ -118,6 +120,14 @@ export default async function ProductDocPage({ params }: { params: Promise<{ id:
               <Label>Perguntas em aberto (uma por linha)</Label>
               <Textarea name="openQuestions" rows={3} defaultValue={arrayToLines(doc?.openQuestions as string[])} />
             </Field>
+            <Field>
+              <Label>Business Rules (uma por linha)</Label>
+              <Textarea name="businessRules" rows={3} defaultValue={arrayToLines(doc?.businessRules as string[])} />
+            </Field>
+            <Field>
+              <Label>Success Metrics (uma por linha)</Label>
+              <Textarea name="successMetrics" rows={3} defaultValue={arrayToLines(doc?.successMetrics as string[])} />
+            </Field>
             <div className="flex gap-2">
               <Button type="submit" size="sm">
                 Salvar
@@ -135,6 +145,8 @@ export default async function ProductDocPage({ params }: { params: Promise<{ id:
               ["Objetivos", doc?.goals as string[] | undefined],
               ["Fora de escopo", doc?.nonGoals as string[] | undefined],
               ["Perguntas em aberto", doc?.openQuestions as string[] | undefined],
+              ["Business Rules", doc?.businessRules as string[] | undefined],
+              ["Success Metrics", doc?.successMetrics as string[] | undefined],
             ].map(([label, items]) => (
               <div key={label as string}>
                 <p className="text-xs font-medium uppercase tracking-wide text-slate-400">{label as string}</p>
@@ -249,6 +261,32 @@ export default async function ProductDocPage({ params }: { params: Promise<{ id:
           </form>
         )}
       </Card>
+
+      {role === "owner" && (
+        <Card>
+          <p className="mb-1 text-sm font-semibold text-slate-700">Azure DevOps</p>
+          <p className="mb-3 text-xs text-slate-500">
+            Cria (ou atualiza) um card Feature no board Trevo Labs com este PRD — Description recebe o
+            contexto, objetivos e user stories; Business Rules, Acceptance Criteria e Success Metrics
+            entram como seções próprias dentro do card.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <form action={sendToAzureDevOps.bind(null, id)}>
+              <Button type="submit" size="sm" disabled={!doc}>
+                {opp.azureFeatureId ? "Atualizar Feature no Azure DevOps" : "Enviar como Feature ao Azure DevOps"}
+              </Button>
+            </form>
+            {opp.azureFeatureId && (
+              <a href={featureWebUrl(opp.azureFeatureId)} target="_blank" rel="noreferrer">
+                <Button type="button" variant="secondary" size="sm">
+                  Ver card #{opp.azureFeatureId}
+                </Button>
+              </a>
+            )}
+          </div>
+          {!doc && <p className="mt-2 text-xs text-amber-700">Gere ou escreva o PRD acima antes de enviar.</p>}
+        </Card>
+      )}
 
       {hypothesis && (
         <p className="text-xs text-slate-400">

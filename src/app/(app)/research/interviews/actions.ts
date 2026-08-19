@@ -18,6 +18,30 @@ import { recomputeHypothesis } from "@/lib/recompute-hypothesis";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
+// Usado a partir da tela de Persona quando uma Entrevista é uma das razões
+// que bloqueiam a exclusão (ver checkPersonaDeletable) — desvincula sem
+// apagar a entrevista (ela continua no roteiro original, só solta a
+// persona).
+export async function unlinkPersonaFromInterview(interviewId: string, personaId: string) {
+  const { role } = await getPageContext();
+  if (role !== "owner" && role !== "editor") throw new Error("Sem permissão.");
+  await db.update(interviews).set({ personaId: null }).where(eq(interviews.id, interviewId));
+  revalidatePath("/research/interviews", "layout");
+  revalidatePath(`/personas/${personaId}`);
+}
+
+// Usado a partir da tela de Hipótese quando um roteiro de entrevista é uma
+// das razões que bloqueiam a exclusão (ver checkHypothesisDeletable) —
+// desvincula sem apagar o roteiro (ele continua em Research & Testing, só
+// solta a hipótese).
+export async function unlinkHypothesisFromGuide(guideId: string, hypothesisId: string) {
+  const { role } = await getPageContext();
+  if (role !== "owner" && role !== "editor") throw new Error("Sem permissão.");
+  await db.update(interviewGuides).set({ hypothesisId: null }).where(eq(interviewGuides.id, guideId));
+  revalidatePath(`/research/interviews/${guideId}`);
+  revalidatePath(`/hypotheses/${hypothesisId}`);
+}
+
 export async function createGuide(formData: FormData) {
   const { user, project, role } = await getPageContext();
   if (role === "viewer") throw new Error("Sem permissão.");

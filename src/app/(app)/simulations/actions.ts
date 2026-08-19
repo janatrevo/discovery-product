@@ -86,3 +86,38 @@ export async function runSimulation(hypothesisId: string | null, formData: FormD
   if (hypothesisId) revalidatePath(`/hypotheses/${hypothesisId}`);
   redirect(`/simulations/${run.id}`);
 }
+
+// Existia um "beco sem saída": excluir um Produto com simulação vinculada é
+// bloqueado por checkProductDeletable (propositalmente, ver
+// src/lib/delete-guards.ts — evita deixar a exclusão do produto quebrar o
+// histórico da simulação), mas não havia nenhum jeito de excluir a própria
+// simulação pela interface para desbloquear isso. simulationResponses tem
+// onDelete cascade (ver schema), então excluir a rodada já limpa as
+// respostas junto — não deixa nada órfão.
+// Usado a partir da tela de Hipótese quando uma simulação é uma das razões
+// que bloqueiam a exclusão (ver checkHypothesisDeletable, que conta por
+// simulationRuns.hypothesisId — diferente de checkPersonaDeletable, que
+// conta por simulationResponses.personaId). Aqui dá pra desvincular sem
+// apagar a simulação, porque simulationRuns.hypothesisId é opcional ("relação
+// inspired_research, nunca evidence_for", ver src/db/schema.ts).
+export async function unlinkHypothesisFromSimulation(runId: string, hypothesisId: string) {
+  const { role } = await getPageContext();
+  if (role !== "owner" && role !== "editor") throw new Error("Sem permissão.");
+  await db.update(simulationRuns).set({ hypothesisId: null }).where(eq(simulationRuns.id, runId));
+  revalidatePath(`/simulations/${runId}`);
+  revalidatePath(`/hypotheses/${hypothesisId}`);
+}
+
+export async function deleteSimulation(runId: string, redirectTo?: string) {
+  const { project, role } = await getPageContext();
+  if (role !== "owner" && role !== "editor") throw new Error("Sem permissão para excluir simulações.");
+
+  const [run] = await db.select().from(simulationRuns).where(eq(simulationRuns.id, runId)).limit(1);
+  if (!run || run.projectId !== project.id) throw new Error("Simulação não encontrada.");
+
+  await db.delete(simulationRuns).where(eq(simulationRuns.id, runId));
+
+  revalidatePath("/simulations");
+  if (run.hypothesisId) revalidatePath(`/hypotheses/${run.hypothesisId}`);
+  if (redirectTo) redirect(redirectTo);
+}

@@ -25,6 +25,7 @@ import {
   evidence,
   interviews,
   decisions,
+  personas,
 } from "@/db/schema";
 
 export async function checkHypothesisDeletable(hypothesisId: string): Promise<string[]> {
@@ -97,11 +98,12 @@ export async function checkPersonaDeletable(personaId: string): Promise<string[]
 
 export async function checkProductDeletable(productId: string): Promise<string[]> {
   const reasons: string[] = [];
-  const [{ count: simulationCount }] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(simulationRuns)
-    .where(eq(simulationRuns.productId, productId));
+  const [[{ count: simulationCount }], [{ count: personaCount }]] = await Promise.all([
+    db.select({ count: sql<number>`count(*)::int` }).from(simulationRuns).where(eq(simulationRuns.productId, productId)),
+    db.select({ count: sql<number>`count(*)::int` }).from(personas).where(eq(personas.productId, productId)),
+  ]);
   if (simulationCount > 0) reasons.push(`${simulationCount} simulação(ões) vinculada(s)`);
+  if (personaCount > 0) reasons.push(`${personaCount} persona(s) vinculada(s)`);
   return reasons;
 }
 

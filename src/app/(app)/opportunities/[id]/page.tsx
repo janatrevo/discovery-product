@@ -4,8 +4,33 @@ import { db } from "@/db";
 import { opportunities, personas, hypotheses } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { getPageContext } from "@/lib/page-context";
+import { featureWebUrl } from "@/lib/azure-devops";
 import { Badge, Button, Card, Field, Input, Label, PageHeader, Select, Textarea } from "@/components/ui/primitives";
-import { updateOpportunityScores, updateOpportunityStatus, recordOpportunityOutcome } from "../actions";
+import {
+  updateOpportunityScores,
+  updateOpportunityStatus,
+  recordOpportunityOutcome,
+  updatePlannedDates,
+  setAbTestDecision,
+} from "../actions";
+
+const AB_DECISION_LABELS: Record<string, string> = {
+  testing: "Em teste A/B",
+  keep: "Manter permanentemente",
+  remove: "Remover após o teste",
+};
+
+const AB_DECISION_COLORS: Record<string, "amber" | "emerald" | "red"> = {
+  testing: "amber",
+  keep: "emerald",
+  remove: "red",
+};
+
+function toDateInputValue(d: Date | string | null | undefined) {
+  if (!d) return "";
+  const date = typeof d === "string" ? new Date(d) : d;
+  return date.toISOString().slice(0, 10);
+}
 
 const STATUS_OPTIONS = [
   { value: "new", label: "Nova" },
@@ -176,6 +201,76 @@ export default async function OpportunityDetailPage({ params }: { params: Promis
                 </form>
               )}
             </>
+          )}
+        </Card>
+      )}
+
+      {opp.azureFeatureId && (
+        <Card>
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-sm font-semibold text-slate-700">Azure DevOps</p>
+            <a href={featureWebUrl(opp.azureFeatureId)} target="_blank" rel="noreferrer">
+              <Button type="button" variant="secondary" size="sm">
+                Ver card #{opp.azureFeatureId}
+              </Button>
+            </a>
+          </div>
+
+          <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400">
+            Sucesso da funcionalidade (teste A/B)
+          </p>
+          {role === "owner" ? (
+            <form action={setAbTestDecision.bind(null, opp.id)} className="mb-4 flex items-center gap-2">
+              <Select name="abTestDecision" defaultValue={opp.abTestDecision} className="w-56">
+                {Object.entries(AB_DECISION_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </Select>
+              <Button type="submit" size="sm" variant="secondary">
+                Salvar
+              </Button>
+            </form>
+          ) : (
+            <div className="mb-4">
+              <Badge color={AB_DECISION_COLORS[opp.abTestDecision]}>{AB_DECISION_LABELS[opp.abTestDecision]}</Badge>
+            </div>
+          )}
+          <p className="mb-4 text-[11px] leading-snug text-slate-400">
+            Também aparece como tag no card do Azure DevOps (prefixo &quot;ab:&quot;), pra quem só olha o
+            board.
+          </p>
+
+          <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400">
+            Timeline planejada (usada no{" "}
+            <Link href="/azure-devops/roadmap" className="text-indigo-600">
+              Gráfico Gantt de roadmap
+            </Link>
+            )
+          </p>
+          {role === "owner" ? (
+            <form action={updatePlannedDates.bind(null, opp.id)} className="flex flex-wrap items-end gap-2">
+              <Field>
+                <Label>Início planejado</Label>
+                <Input type="date" name="plannedStartDate" defaultValue={toDateInputValue(opp.plannedStartDate)} />
+              </Field>
+              <Field>
+                <Label>Entrega planejada</Label>
+                <Input type="date" name="plannedEndDate" defaultValue={toDateInputValue(opp.plannedEndDate)} />
+              </Field>
+              <Button type="submit" size="sm" variant="secondary">
+                Salvar datas
+              </Button>
+            </form>
+          ) : (
+            <p className="text-sm text-slate-600">
+              {opp.plannedStartDate && opp.plannedEndDate
+                ? `${new Date(opp.plannedStartDate).toLocaleDateString("pt-BR")} — ${new Date(
+                    opp.plannedEndDate
+                  ).toLocaleDateString("pt-BR")}`
+                : "Datas ainda não definidas."}
+            </p>
           )}
         </Card>
       )}

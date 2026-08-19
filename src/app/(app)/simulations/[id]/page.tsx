@@ -3,8 +3,9 @@ import { db } from "@/db";
 import { simulationRuns, simulationResponses, personas } from "@/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import { getPageContext } from "@/lib/page-context";
-import { Badge, Card, PageHeader } from "@/components/ui/primitives";
+import { Badge, Button, Card, PageHeader } from "@/components/ui/primitives";
 import { SimulationBanner } from "@/components/origin-badge";
+import { deleteSimulation } from "../actions";
 
 type SimResponseData = {
   expectations?: string;
@@ -53,9 +54,10 @@ const PANEL_GRID_COLS: Record<number, string> = {
 
 export default async function SimulationDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { project } = await getPageContext();
+  const { project, role } = await getPageContext();
   const [run] = await db.select().from(simulationRuns).where(eq(simulationRuns.id, id)).limit(1);
   if (!run || run.projectId !== project.id) notFound();
+  const canDelete = role === "owner" || role === "editor";
 
   const responses = await db.select().from(simulationResponses).where(eq(simulationResponses.simulationRunId, id));
   const personaList = await db.select().from(personas).where(inArray(personas.id, run.personaIds));
@@ -76,6 +78,15 @@ export default async function SimulationDetailPage({ params }: { params: Promise
       <PageHeader
         title={isPanel ? "Painel multi-persona" : "Resultado da simulação"}
         description={run.scenario ?? undefined}
+        actions={
+          canDelete ? (
+            <form action={deleteSimulation.bind(null, run.id, "/simulations")}>
+              <Button type="submit" variant="danger" size="sm">
+                Excluir simulação
+              </Button>
+            </form>
+          ) : undefined
+        }
       />
       <SimulationBanner mode="scenario" />
       {run.isMock && (

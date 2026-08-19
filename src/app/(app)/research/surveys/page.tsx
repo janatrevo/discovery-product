@@ -3,7 +3,7 @@ import { getPageContext } from "@/lib/page-context";
 import { db } from "@/db";
 import { surveys, hypotheses } from "@/db/schema";
 import { eq, desc } from "drizzle-orm";
-import { Badge, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
+import { Badge, Button, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 
 const STATUS_COLOR: Record<string, "slate" | "sky" | "emerald"> = {
   draft: "slate",
@@ -29,6 +29,11 @@ export default async function SurveysPage() {
         <EmptyState
           title="Nenhum survey ainda"
           description="Crie um survey a partir da aba 'Pesquisa' de uma hipótese."
+          action={
+            <Link href="/hypotheses">
+              <Button size="sm">Ver hipóteses</Button>
+            </Link>
+          }
         />
       ) : (
         <div className="space-y-2">

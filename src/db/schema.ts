@@ -108,6 +108,13 @@ export const opportunityStatusEnum = pgEnum("opportunity_status", [
   "archived",
 ]);
 
+// Decisão pós-teste A/B de uma oportunidade já transformada em Feature no
+// Azure DevOps: "testing" enquanto o experimento roda, depois "keep" (aplicar
+// permanentemente) ou "remove" (reverter). Também é espelhada como tag no
+// card do Azure DevOps (ver src/lib/azure-devops.ts) para aparecer direto no
+// board, não só dentro do discovery-app.
+export const abTestDecisionEnum = pgEnum("ab_test_decision", ["testing", "keep", "remove"]);
+
 // ---------- Identidade / colaboração ----------
 export const users = pgTable("users", {
   id: id(),
@@ -162,6 +169,13 @@ export const personas = pgTable("personas", {
   projectId: uuid("project_id")
     .references(() => projects.id, { onDelete: "cascade" })
     .notNull(),
+  // Vínculo direto persona -> produto (1 produto por persona, opcional) —
+  // diferente do vínculo hipótese <-> produto (hypothesis_products, N:N).
+  // Usado pra responder "quem é o público desse produto específico?" sem
+  // precisar passar por uma hipótese. Sem onDelete: excluir um produto com
+  // personas vinculadas é bloqueado por checkProductDeletable (ver
+  // src/lib/delete-guards.ts) até desvincular.
+  productId: uuid("product_id").references(() => products.id),
   name: varchar("name", { length: 255 }).notNull(),
   origin: personaOriginEnum("origin").notNull(),
   shortDescription: text("short_description"),
@@ -660,6 +674,17 @@ export const opportunities = pgTable("opportunities", {
   outcomeCheckedAt: timestamp("outcome_checked_at", { withTimezone: true }),
   outcomeSummary: text("outcome_summary"),
   outcomeEvidenceId: uuid("outcome_evidence_id").references(() => evidence.id),
+  // Integração com Azure DevOps (ver src/lib/azure-devops.ts): quando a
+  // oportunidade é enviada como Feature para o board Trevo Labs, guarda o id
+  // do work item (número, id nativo do Azure DevOps — não é o mesmo id uuid
+  // desta tabela). planned{Start,End}Date alimentam o Gráfico Gantt de
+  // roadmap (ver /azure-devops/roadmap) — são datas de planejamento do
+  // discovery-app, não campos nativos do Azure DevOps (evita depender de
+  // Start Date/Target Date existirem no processo configurado lá).
+  azureFeatureId: integer("azure_feature_id"),
+  plannedStartDate: timestamp("planned_start_date", { withTimezone: true }),
+  plannedEndDate: timestamp("planned_end_date", { withTimezone: true }),
+  abTestDecision: abTestDecisionEnum("ab_test_decision").notNull().default("testing"),
   createdBy: uuid("created_by").references(() => users.id),
   createdAt: createdAt(),
 });
@@ -680,6 +705,12 @@ export const productDocs = pgTable("product_docs", {
   goals: jsonb("goals").$type<string[]>().default(sql`'[]'::jsonb`),
   nonGoals: jsonb("non_goals").$type<string[]>().default(sql`'[]'::jsonb`),
   openQuestions: jsonb("open_questions").$type<string[]>().default(sql`'[]'::jsonb`),
+  // Usados ao transformar a oportunidade em Feature no Azure DevOps (ver
+  // sendToAzureDevOps em opportunities/[id]/doc/actions.ts) — junto com
+  // goals/nonGoals/openQuestions e os Acceptance Criteria já existentes em
+  // cada User Story, compõem o card completo.
+  businessRules: jsonb("business_rules").$type<string[]>().default(sql`'[]'::jsonb`),
+  successMetrics: jsonb("success_metrics").$type<string[]>().default(sql`'[]'::jsonb`),
   generatedBy: generatedByEnum("generated_by").notNull().default("human"),
   promptSnapshot: text("prompt_snapshot"),
   modelVersion: varchar("model_version", { length: 120 }),

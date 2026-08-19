@@ -49,6 +49,7 @@ export async function createPersona(formData: FormData) {
 
   const values: Record<string, unknown> = {
     projectId: project.id,
+    productId: String(formData.get("productId") || "") || null,
     name: String(formData.get("name") || ""),
     origin: String(formData.get("origin") || "synthetic"),
     shortDescription: String(formData.get("shortDescription") || ""),
@@ -89,6 +90,7 @@ export async function updatePersona(personaId: string, formData: FormData) {
   if (!existing) throw new Error("Persona não encontrada.");
 
   const values: Record<string, unknown> = {
+    productId: String(formData.get("productId") || "") || null,
     name: String(formData.get("name") || ""),
     origin: String(formData.get("origin") || existing.origin),
     shortDescription: String(formData.get("shortDescription") || ""),
@@ -126,6 +128,17 @@ export async function updatePersona(personaId: string, formData: FormData) {
   revalidatePath(`/personas/${personaId}`);
   revalidatePath("/personas");
   redirect(`/personas/${personaId}`);
+}
+
+// Usado a partir da tela de Produto quando uma persona é uma das razões que
+// bloqueiam a exclusão (ver checkProductDeletable em src/lib/delete-guards.ts)
+// — desvincula sem apagar a persona, só solta o produto.
+export async function unlinkProductFromPersona(personaId: string, productId: string) {
+  const { role } = await getPageContext();
+  if (role !== "owner" && role !== "editor") throw new Error("Sem permissão.");
+  await db.update(personas).set({ productId: null }).where(eq(personas.id, personaId));
+  revalidatePath(`/personas/${personaId}`);
+  revalidatePath(`/products/${productId}`);
 }
 
 export async function deletePersona(personaId: string) {

@@ -5,11 +5,32 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button, Card, Field, Input, Label } from "@/components/ui/primitives";
 
+// Cadastro público desativado em produção — ver comentário em
+// src/app/api/auth/signup/route.ts. `process.env.NODE_ENV` é substituído
+// pelo Next.js em tempo de build, inclusive em componente client como este.
+const SIGNUP_DISABLED = process.env.NODE_ENV === "production";
+
 export default function SignupPage() {
   const router = useRouter();
   const [form, setForm] = useState({ name: "", email: "", password: "", orgName: "" });
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  if (SIGNUP_DISABLED) {
+    return (
+      <Card>
+        <p className="text-sm text-slate-600">
+          O cadastro público está desativado — esta é uma ferramenta interna. Peça a um administrador para
+          te enviar um convite pela aba Settings.
+        </p>
+        <p className="mt-4 text-center text-sm text-slate-500">
+          <Link href="/login" className="font-medium text-indigo-600">
+            Voltar para o login
+          </Link>
+        </p>
+      </Card>
+    );
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();

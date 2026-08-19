@@ -3,7 +3,7 @@ import { getPageContext } from "@/lib/page-context";
 import { db } from "@/db";
 import { interviewGuides, interviews, hypotheses } from "@/db/schema";
 import { eq, desc, sql } from "drizzle-orm";
-import { Badge, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
+import { Badge, Button, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 
 export default async function InterviewGuidesPage() {
   const { project } = await getPageContext();
@@ -29,6 +29,11 @@ export default async function InterviewGuidesPage() {
         <EmptyState
           title="Nenhum roteiro de entrevista ainda"
           description="Crie um roteiro a partir da aba 'Pesquisa' de uma hipótese."
+          action={
+            <Link href="/hypotheses">
+              <Button size="sm">Ver hipóteses</Button>
+            </Link>
+          }
         />
       ) : (
         <div className="space-y-2">

@@ -72,6 +72,12 @@ const STEPS: TourStep[] = [
     description: "Exporte um resumo em Markdown para compartilhar com alguém fora da plataforma.",
   },
   {
+    tourId: "nav-azure-devops",
+    title: "Azure DevOps",
+    description:
+      "Cards do tipo Feature do board Trevo Labs, sincronizados direto com o Azure DevOps. Só administradores (Owner) podem criar, editar ou excluir.",
+  },
+  {
     tourId: "nav-settings",
     title: "Settings",
     description: "Ajuste os limiares de confiança do projeto, convide membros do time, e crie ou troque entre projetos.",

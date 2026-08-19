@@ -1,10 +1,17 @@
 import { Card, Field, Input, Label, Select, Textarea } from "@/components/ui/primitives";
 import { arrayToLines } from "@/lib/list-utils";
-import type { personas } from "@/db/schema";
+import type { personas, products } from "@/db/schema";
 
 type Persona = typeof personas.$inferSelect;
+type Product = typeof products.$inferSelect;
 
-export function PersonaFormFields({ defaultValues }: { defaultValues?: Persona }) {
+export function PersonaFormFields({
+  defaultValues,
+  products = [],
+}: {
+  defaultValues?: Persona;
+  products?: Product[];
+}) {
   const d = defaultValues;
   return (
     <div className="space-y-4">
@@ -19,6 +26,17 @@ export function PersonaFormFields({ defaultValues }: { defaultValues?: Persona }
           <Select name="origin" defaultValue={d?.origin ?? "synthetic"} required>
             <option value="synthetic">Sintética — para exploração inicial</option>
             <option value="research_based">Research-based — exige fonte de evidência</option>
+          </Select>
+        </Field>
+        <Field>
+          <Label>Produto vinculado</Label>
+          <Select name="productId" defaultValue={d?.productId ?? ""}>
+            <option value="">— nenhum —</option>
+            {products.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
           </Select>
         </Field>
         <Field>

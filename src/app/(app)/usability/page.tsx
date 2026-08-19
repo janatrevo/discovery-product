@@ -3,7 +3,7 @@ import { getPageContext } from "@/lib/page-context";
 import { db } from "@/db";
 import { usabilityTests, hypotheses } from "@/db/schema";
 import { eq, desc } from "drizzle-orm";
-import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
+import { Button, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { SimulationBanner } from "@/components/origin-badge";
 
 export default async function UsabilityTestsPage() {
@@ -25,6 +25,11 @@ export default async function UsabilityTestsPage() {
         <EmptyState
           title="Nenhum teste de usabilidade ainda"
           description="Crie um teste a partir da aba 'Simulações' de uma hipótese, ou envie uma imagem para análise."
+          action={
+            <Link href="/hypotheses">
+              <Button size="sm">Ver hipóteses</Button>
+            </Link>
+          }
         />
       ) : (
         <div className="mt-4 space-y-2">

@@ -9,12 +9,26 @@ import {
   hypothesisHistory,
   personas,
   products,
+  experiments,
+  opportunities,
+  surveys,
+  interviewGuides,
+  usabilityTests,
+  usabilityFindings,
+  simulationRuns,
+  decisions,
 } from "@/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, sql } from "drizzle-orm";
 import { getPageContext } from "@/lib/page-context";
 import { Badge, Button, Card, PageHeader } from "@/components/ui/primitives";
 import { STATUS_LABELS, STATUS_COLORS, HYPOTHESIS_TYPES } from "@/lib/hypothesis-types";
 import { deleteHypothesis, overrideStatus, clearOverride } from "../actions";
+import { deleteExperiment } from "../../experiments/actions";
+import { unlinkHypothesisFromOpportunity } from "../../opportunities/actions";
+import { unlinkHypothesisFromSurvey } from "../../research/surveys/actions";
+import { unlinkHypothesisFromGuide } from "../../research/interviews/actions";
+import { unlinkHypothesisFromTest, unlinkHypothesisFromFinding } from "../../usability/actions";
+import { unlinkHypothesisFromSimulation } from "../../simulations/actions";
 import { EvidenceTab } from "@/components/hypothesis-tabs/evidence-tab";
 import { ConfidenceReceiptCard } from "@/components/hypothesis-tabs/confidence-receipt";
 import { ExperimentsMiniList } from "@/components/hypothesis-tabs/experiments-mini";
@@ -44,7 +58,27 @@ export default async function HypothesisWorkspacePage({
   const [hyp] = await db.select().from(hypotheses).where(eq(hypotheses.id, id)).limit(1);
   if (!hyp || hyp.projectId !== project.id) notFound();
 
-  const [linkedPersonas, linkedProducts] = await Promise.all([
+  const canDelete = role === "owner" || role === "editor";
+
+  // Espelha exatamente o que checkHypothesisDeletable (src/lib/delete-guards.ts)
+  // verifica antes de excluir — mesma lógica já aplicada em Persona e
+  // Produto: mostra cada vínculo com um jeito de resolver, em vez de deixar
+  // a exclusão estourar um "Runtime Error" cru. Decisões são a única exceção
+  // sem botão de ação: por design, uma hipótese citada num Decision Log
+  // nunca pode ser desvinculada — é histórico imutável (ver comentário em
+  // checkHypothesisDeletable).
+  const [
+    linkedPersonas,
+    linkedProducts,
+    blockingExperiments,
+    blockingOpportunities,
+    blockingSurveys,
+    blockingGuides,
+    blockingTests,
+    blockingFindings,
+    blockingSimulations,
+    blockingDecisions,
+  ] = await Promise.all([
     db
       .select({ persona: personas })
       .from(hypothesisPersonas)
@@ -55,7 +89,29 @@ export default async function HypothesisWorkspacePage({
       .from(hypothesisProducts)
       .innerJoin(products, eq(products.id, hypothesisProducts.productId))
       .where(eq(hypothesisProducts.hypothesisId, id)),
+    canDelete ? db.select().from(experiments).where(eq(experiments.hypothesisId, id)) : Promise.resolve([]),
+    canDelete ? db.select().from(opportunities).where(eq(opportunities.hypothesisId, id)) : Promise.resolve([]),
+    canDelete ? db.select().from(surveys).where(eq(surveys.hypothesisId, id)) : Promise.resolve([]),
+    canDelete ? db.select().from(interviewGuides).where(eq(interviewGuides.hypothesisId, id)) : Promise.resolve([]),
+    canDelete ? db.select().from(usabilityTests).where(eq(usabilityTests.hypothesisId, id)) : Promise.resolve([]),
+    canDelete ? db.select().from(usabilityFindings).where(eq(usabilityFindings.hypothesisId, id)) : Promise.resolve([]),
+    canDelete ? db.select().from(simulationRuns).where(eq(simulationRuns.hypothesisId, id)) : Promise.resolve([]),
+    canDelete
+      ? db.select().from(decisions).where(sql`${decisions.hypothesisRefs} @> ${JSON.stringify([id])}::jsonb`)
+      : Promise.resolve([]),
   ]);
+
+  const hasBlockers =
+    canDelete &&
+    (blockingExperiments.length > 0 ||
+      blockingOpportunities.length > 0 ||
+      blockingSurveys.length > 0 ||
+      blockingGuides.length > 0 ||
+      blockingTests.length > 0 ||
+      blockingFindings.length > 0 ||
+      blockingSimulations.length > 0 ||
+      blockingDecisions.length > 0);
+  const canDeleteNow = canDelete && !hasBlockers;
 
   const typeInfo = HYPOTHESIS_TYPES.find((t) => t.value === hyp.type);
 
@@ -73,7 +129,7 @@ export default async function HypothesisWorkspacePage({
             <Link href={`/hypotheses/${id}/edit`}>
               <Button variant="secondary">Editar</Button>
             </Link>
-            {(role === "owner" || role === "editor") && (
+            {canDeleteNow && (
               <form action={deleteHypothesis.bind(null, id)}>
                 <Button variant="danger" type="submit">
                   Excluir
@@ -83,6 +139,195 @@ export default async function HypothesisWorkspacePage({
           </>
         }
       />
+
+      {hasBlockers && (
+        <Card className="mb-4 border-amber-300 bg-amber-50">
+          <p className="text-sm font-medium text-amber-900">Esta hipótese não pode ser excluída ainda</p>
+          <p className="mt-1 text-sm text-amber-800">
+            Desvincule (ou exclua, no caso de experimentos) as referências abaixo para liberar a exclusão.
+          </p>
+
+          {blockingExperiments.length > 0 && (
+            <div className="mt-3">
+              <p className="text-xs font-semibold uppercase text-amber-700">
+                Experimentos ({blockingExperiments.length})
+              </p>
+              <div className="mt-1 space-y-2">
+                {blockingExperiments.map((e) => (
+                  <div key={e.id} className="flex items-center justify-between gap-2 rounded-md border border-amber-200 bg-white px-3 py-2">
+                    <Link href={`/experiments/${e.id}`} className="min-w-0 flex-1">
+                      <p className="truncate text-sm text-slate-800">{e.objective || "Experimento sem objetivo definido"}</p>
+                    </Link>
+                    <form action={deleteExperiment.bind(null, e.id, `/hypotheses/${id}`)}>
+                      <Button type="submit" variant="ghost" size="sm">
+                        excluir experimento
+                      </Button>
+                    </form>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-1 text-xs text-amber-700">
+                Experimentos exigem uma hipótese — não dá pra desvincular, só excluir o experimento inteiro.
+              </p>
+            </div>
+          )}
+
+          {blockingOpportunities.length > 0 && (
+            <div className="mt-3">
+              <p className="text-xs font-semibold uppercase text-amber-700">
+                Oportunidades ({blockingOpportunities.length})
+              </p>
+              <div className="mt-1 space-y-2">
+                {blockingOpportunities.map((o) => (
+                  <div key={o.id} className="flex items-center justify-between gap-2 rounded-md border border-amber-200 bg-white px-3 py-2">
+                    <Link href={`/opportunities/${o.id}`} className="min-w-0 flex-1">
+                      <p className="truncate text-sm text-slate-800">{o.title}</p>
+                    </Link>
+                    <form action={unlinkHypothesisFromOpportunity.bind(null, o.id, id)}>
+                      <Button type="submit" variant="ghost" size="sm">
+                        desvincular
+                      </Button>
+                    </form>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {blockingSurveys.length > 0 && (
+            <div className="mt-3">
+              <p className="text-xs font-semibold uppercase text-amber-700">
+                Surveys ({blockingSurveys.length})
+              </p>
+              <div className="mt-1 space-y-2">
+                {blockingSurveys.map((s) => (
+                  <div key={s.id} className="flex items-center justify-between gap-2 rounded-md border border-amber-200 bg-white px-3 py-2">
+                    <Link href={`/research/surveys/${s.id}`} className="min-w-0 flex-1">
+                      <p className="truncate text-sm text-slate-800">{s.title}</p>
+                    </Link>
+                    <form action={unlinkHypothesisFromSurvey.bind(null, s.id, id)}>
+                      <Button type="submit" variant="ghost" size="sm">
+                        desvincular
+                      </Button>
+                    </form>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {blockingGuides.length > 0 && (
+            <div className="mt-3">
+              <p className="text-xs font-semibold uppercase text-amber-700">
+                Roteiros de entrevista ({blockingGuides.length})
+              </p>
+              <div className="mt-1 space-y-2">
+                {blockingGuides.map((g) => (
+                  <div key={g.id} className="flex items-center justify-between gap-2 rounded-md border border-amber-200 bg-white px-3 py-2">
+                    <Link href={`/research/interviews/${g.id}`} className="min-w-0 flex-1">
+                      <p className="truncate text-sm text-slate-800">{g.title}</p>
+                    </Link>
+                    <form action={unlinkHypothesisFromGuide.bind(null, g.id, id)}>
+                      <Button type="submit" variant="ghost" size="sm">
+                        desvincular
+                      </Button>
+                    </form>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {blockingTests.length > 0 && (
+            <div className="mt-3">
+              <p className="text-xs font-semibold uppercase text-amber-700">
+                Testes de usabilidade ({blockingTests.length})
+              </p>
+              <div className="mt-1 space-y-2">
+                {blockingTests.map((t) => (
+                  <div key={t.id} className="flex items-center justify-between gap-2 rounded-md border border-amber-200 bg-white px-3 py-2">
+                    <Link href={`/usability/${t.id}`} className="min-w-0 flex-1">
+                      <p className="truncate text-sm text-slate-800">{t.title}</p>
+                    </Link>
+                    <form action={unlinkHypothesisFromTest.bind(null, t.id, id)}>
+                      <Button type="submit" variant="ghost" size="sm">
+                        desvincular
+                      </Button>
+                    </form>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {blockingFindings.length > 0 && (
+            <div className="mt-3">
+              <p className="text-xs font-semibold uppercase text-amber-700">
+                Achados de usabilidade ({blockingFindings.length})
+              </p>
+              <div className="mt-1 space-y-2">
+                {blockingFindings.map((f) => (
+                  <div key={f.id} className="flex items-center justify-between gap-2 rounded-md border border-amber-200 bg-white px-3 py-2">
+                    <Link href={`/usability/${f.usabilityTestId}`} className="min-w-0 flex-1">
+                      <p className="truncate text-sm text-slate-800">{f.problem}</p>
+                    </Link>
+                    <form action={unlinkHypothesisFromFinding.bind(null, f.id, id)}>
+                      <Button type="submit" variant="ghost" size="sm">
+                        desvincular
+                      </Button>
+                    </form>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {blockingSimulations.length > 0 && (
+            <div className="mt-3">
+              <p className="text-xs font-semibold uppercase text-amber-700">
+                Simulações ({blockingSimulations.length})
+              </p>
+              <div className="mt-1 space-y-2">
+                {blockingSimulations.map((s) => (
+                  <div key={s.id} className="flex items-center justify-between gap-2 rounded-md border border-amber-200 bg-white px-3 py-2">
+                    <Link href={`/simulations/${s.id}`} className="min-w-0 flex-1">
+                      <p className="truncate text-sm text-slate-800">{s.scenario || "Cenário sem título"}</p>
+                    </Link>
+                    <form action={unlinkHypothesisFromSimulation.bind(null, s.id, id)}>
+                      <Button type="submit" variant="ghost" size="sm">
+                        desvincular
+                      </Button>
+                    </form>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {blockingDecisions.length > 0 && (
+            <div className="mt-3">
+              <p className="text-xs font-semibold uppercase text-amber-700">
+                Decisões que citam esta hipótese ({blockingDecisions.length})
+              </p>
+              <div className="mt-1 space-y-2">
+                {blockingDecisions.map((d) => (
+                  <Link
+                    key={d.id}
+                    href={`/decisions/${d.id}`}
+                    className="block rounded-md border border-amber-200 bg-white px-3 py-2"
+                  >
+                    <p className="truncate text-sm text-slate-800">{d.decisionText}</p>
+                  </Link>
+                ))}
+              </div>
+              <p className="mt-1 text-xs text-amber-700">
+                Decisões já registradas nunca podem ser desvinculadas — é histórico imutável do Decision Log.
+                Enquanto essas decisões existirem, esta hipótese não pode ser excluída.
+              </p>
+            </div>
+          )}
+        </Card>
+      )}
 
       <div className="mb-5 flex gap-1 border-b border-slate-200">
         {TABS.map((t) => (

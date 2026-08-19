@@ -24,6 +24,25 @@ async function saveUploadedImage(file: File): Promise<{ url: string; base64: str
   return { url, base64: buffer.toString("base64"), mediaType };
 }
 
+// Usados a partir da tela de Hipótese quando um teste de usabilidade ou um
+// achado de usabilidade é uma das razões que bloqueiam a exclusão (ver
+// checkHypothesisDeletable) — desvinculam sem apagar o registro original.
+export async function unlinkHypothesisFromTest(testId: string, hypothesisId: string) {
+  const { role } = await getPageContext();
+  if (role !== "owner" && role !== "editor") throw new Error("Sem permissão.");
+  await db.update(usabilityTests).set({ hypothesisId: null }).where(eq(usabilityTests.id, testId));
+  revalidatePath(`/usability/${testId}`);
+  revalidatePath(`/hypotheses/${hypothesisId}`);
+}
+
+export async function unlinkHypothesisFromFinding(findingId: string, hypothesisId: string) {
+  const { role } = await getPageContext();
+  if (role !== "owner" && role !== "editor") throw new Error("Sem permissão.");
+  await db.update(usabilityFindings).set({ hypothesisId: null }).where(eq(usabilityFindings.id, findingId));
+  revalidatePath("/usability", "layout");
+  revalidatePath(`/hypotheses/${hypothesisId}`);
+}
+
 export async function createUsabilityTest(hypothesisId: string | null, formData: FormData) {
   const { user, project, role } = await getPageContext();
   if (role === "viewer") throw new Error("Sem permissão.");
@@ -94,6 +113,18 @@ export async function createUsabilityTest(hypothesisId: string | null, formData:
   revalidatePath("/usability");
   if (hypothesisId) revalidatePath(`/hypotheses/${hypothesisId}`);
   redirect(`/usability/${test.id}`);
+}
+
+// Usado a partir da tela de Persona quando um Achado de usabilidade é uma
+// das razões que bloqueiam a exclusão (ver checkPersonaDeletable) —
+// desvincula sem apagar o achado (ele continua no teste de usabilidade
+// original, só solta a persona).
+export async function unlinkPersonaFromFinding(findingId: string, personaId: string) {
+  const { role } = await getPageContext();
+  if (role !== "owner" && role !== "editor") throw new Error("Sem permissão.");
+  await db.update(usabilityFindings).set({ personaId: null }).where(eq(usabilityFindings.id, findingId));
+  revalidatePath("/usability", "layout");
+  revalidatePath(`/personas/${personaId}`);
 }
 
 export async function updateFinding(findingId: string, formData: FormData) {

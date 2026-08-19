@@ -5,6 +5,8 @@ import { projects, projectMemberships, users } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getPageContext } from "@/lib/page-context";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
+import { inviteUserByEmail } from "@/lib/supabase-admin";
 
 export async function updateThresholds(formData: FormData) {
   const { project, role } = await getPageContext();
@@ -22,9 +24,13 @@ export async function updateThresholds(formData: FormData) {
   revalidatePath("/settings");
 }
 
+// Só Owner (o "administrador" do projeto — não existe papel global no
+// schema, ver src/lib/current-user.ts) pode convidar gente nova, agora que a
+// ferramenta é interna e o cadastro público em /signup foi desativado em
+// produção (ver src/app/api/auth/signup/route.ts).
 export async function inviteMember(formData: FormData) {
   const { project, role } = await getPageContext();
-  if (role !== "owner" && role !== "editor") throw new Error("Sem permissão para convidar membros.");
+  if (role !== "owner") throw new Error("Só administradores (Owner) podem convidar membros.");
   const email = String(formData.get("email") || "").toLowerCase().trim();
   const memberRole = String(formData.get("role") || "contributor") as
     | "owner"
@@ -33,11 +39,24 @@ export async function inviteMember(formData: FormData) {
     | "viewer";
 
   const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+
   if (!user) {
-    throw new Error(
-      `Não existe conta com o e-mail ${email}. No MVP, a pessoa precisa criar a conta em /signup antes de ser adicionada.`
-    );
+    // Pessoa ainda não tem conta na ferramenta: dispara um convite de
+    // verdade por e-mail via Supabase Auth (mesmo "carteiro" usado por
+    // scripts/invite-user.ts), já carregando o projeto e o papel escolhidos
+    // aqui no metadata — accept-invite usa isso para conceder acesso só a
+    // este projeto, no papel certo (não "owner em tudo").
+    const h = await headers();
+    const host = h.get("host") || "localhost:3000";
+    const proto = host.startsWith("localhost") || host.startsWith("127.0.0.1") ? "http" : "https";
+    await inviteUserByEmail(email, {
+      redirectTo: `${proto}://${host}/definir-senha`,
+      data: { projectId: project.id, role: memberRole },
+    });
+    revalidatePath("/settings");
+    return;
   }
+
   const [existing] = await db
     .select()
     .from(projectMemberships)

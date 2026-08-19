@@ -10,10 +10,12 @@ import {
   evidence,
   hypothesisEvidence,
 } from "@/db/schema";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, asc, sql } from "drizzle-orm";
 import { getPageContext } from "@/lib/page-context";
 import { draftProductDoc } from "@/lib/ai";
 import { linesToArray } from "@/lib/list-utils";
+import { createFeature, updateFeature } from "@/lib/azure-devops";
+import { buildFeatureDescription } from "@/lib/azure-feature-description";
 import { revalidatePath } from "next/cache";
 
 async function loadOpportunity(opportunityId: string, projectId: string) {
@@ -65,6 +67,8 @@ export async function generateProductDoc(opportunityId: string) {
         goals: data.goals,
         nonGoals: data.nonGoals,
         openQuestions: data.openQuestions,
+        businessRules: data.businessRules,
+        successMetrics: data.successMetrics,
         generatedBy: "ai_generated",
         promptSnapshot,
         modelVersion,
@@ -79,6 +83,8 @@ export async function generateProductDoc(opportunityId: string) {
       goals: data.goals,
       nonGoals: data.nonGoals,
       openQuestions: data.openQuestions,
+      businessRules: data.businessRules,
+      successMetrics: data.successMetrics,
       generatedBy: "ai_generated",
       promptSnapshot,
       modelVersion,
@@ -128,6 +134,8 @@ export async function updateProductDoc(opportunityId: string, formData: FormData
   const goals = linesToArray(formData.get("goals"));
   const nonGoals = linesToArray(formData.get("nonGoals"));
   const openQuestions = linesToArray(formData.get("openQuestions"));
+  const businessRules = linesToArray(formData.get("businessRules"));
+  const successMetrics = linesToArray(formData.get("successMetrics"));
 
   const [existing] = await db.select().from(productDocs).where(eq(productDocs.opportunityId, opportunityId)).limit(1);
 
@@ -138,7 +146,7 @@ export async function updateProductDoc(opportunityId: string, formData: FormData
   if (existing) {
     await db
       .update(productDocs)
-      .set({ goals, nonGoals, openQuestions, generatedBy: nextGeneratedBy, updatedAt: new Date() })
+      .set({ goals, nonGoals, openQuestions, businessRules, successMetrics, generatedBy: nextGeneratedBy, updatedAt: new Date() })
       .where(eq(productDocs.id, existing.id));
   } else {
     await db.insert(productDocs).values({
@@ -146,12 +154,62 @@ export async function updateProductDoc(opportunityId: string, formData: FormData
       goals,
       nonGoals,
       openQuestions,
+      businessRules,
+      successMetrics,
       generatedBy: "human",
       createdBy: user.id,
     });
   }
 
   revalidatePath(`/opportunities/${opportunityId}/doc`);
+}
+
+// Transforma a oportunidade (com seu PRD já gerado/revisado) em um card
+// Feature no board Trevo Labs do Azure DevOps — ou atualiza o card já
+// vinculado, se a oportunidade já tiver sido enviada antes (nunca cria um
+// segundo card para a mesma oportunidade). Só Owner pode enviar, mesma régua
+// do resto da integração com Azure DevOps (ver src/app/(app)/azure-devops/actions.ts).
+export async function sendToAzureDevOps(opportunityId: string) {
+  const { project, role } = await getPageContext();
+  if (role !== "owner") throw new Error("Só administradores (Owner) podem enviar para o Azure DevOps.");
+
+  const opp = await loadOpportunity(opportunityId, project.id);
+  const [doc] = await db.select().from(productDocs).where(eq(productDocs.opportunityId, opportunityId)).limit(1);
+  if (!doc) throw new Error("Gere (ou escreva) o PRD desta oportunidade antes de enviar para o Azure DevOps.");
+
+  const stories = await db
+    .select()
+    .from(userStories)
+    .where(eq(userStories.opportunityId, opportunityId))
+    .orderBy(asc(userStories.orderIndex));
+
+  const description = buildFeatureDescription({
+    opportunityTitle: opp.title,
+    opportunityDescription: opp.description ?? "",
+    problemRef: opp.problemRef,
+    goals: doc.goals as string[],
+    nonGoals: doc.nonGoals as string[],
+    openQuestions: doc.openQuestions as string[],
+    businessRules: doc.businessRules as string[],
+    successMetrics: doc.successMetrics as string[],
+    userStories: stories.map((s) => ({
+      asA: s.asA,
+      iWant: s.iWant,
+      soThat: s.soThat,
+      acceptanceCriteria: (s.acceptanceCriteria as string[]) ?? [],
+    })),
+  });
+
+  if (opp.azureFeatureId) {
+    await updateFeature(opp.azureFeatureId, { title: opp.title, description });
+  } else {
+    const created = await createFeature({ title: opp.title, description });
+    await db.update(opportunities).set({ azureFeatureId: created.id }).where(eq(opportunities.id, opportunityId));
+  }
+
+  revalidatePath(`/opportunities/${opportunityId}/doc`);
+  revalidatePath(`/opportunities/${opportunityId}`);
+  revalidatePath("/azure-devops");
 }
 
 export async function markDocReviewed(opportunityId: string) {

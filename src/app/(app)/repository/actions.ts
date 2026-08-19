@@ -7,6 +7,17 @@ import { getPageContext } from "@/lib/page-context";
 import { detectEvidencePatterns } from "@/lib/ai";
 import { revalidatePath } from "next/cache";
 
+// Usado a partir da tela de Persona quando uma Evidência é uma das razões
+// que bloqueiam a exclusão (ver checkPersonaDeletable) — desvincula sem
+// apagar a evidência (ela continua no Repositório, só solta a persona).
+export async function unlinkPersonaFromEvidence(evidenceId: string, personaId: string) {
+  const { role } = await getPageContext();
+  if (role !== "owner" && role !== "editor") throw new Error("Sem permissão.");
+  await db.update(evidence).set({ personaId: null }).where(eq(evidence.id, evidenceId));
+  revalidatePath("/repository");
+  revalidatePath(`/personas/${personaId}`);
+}
+
 export async function analyzePatterns() {
   const { user, project, role } = await getPageContext();
   if (role === "viewer") throw new Error("Sem permissão.");

@@ -44,6 +44,35 @@ export async function inviteUserByEmail(
   return body;
 }
 
+// Dispara o e-mail de "recuperar senha" do próprio Supabase Auth (endpoint
+// POST /auth/v1/recover do GoTrue). O link cai na mesma página /definir-senha
+// usada pelo convite — o hash da URL vem com type=recovery, e o backend
+// (accept-invite) usa esse type para NUNCA mexer em project_memberships numa
+// recuperação de senha (só num convite de verdade).
+export async function requestPasswordRecovery(email: string, redirectTo?: string) {
+  assertConfigured();
+  const url = new URL(`${SUPABASE_URL}/auth/v1/recover`);
+  if (redirectTo) url.searchParams.set("redirect_to", redirectTo);
+
+  const res = await fetch(url.toString(), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: SERVICE_ROLE_KEY!,
+      Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+    },
+    body: JSON.stringify({ email }),
+  });
+
+  // Não lança em caso de e-mail inexistente — a rota que chama esta função
+  // sempre retorna uma mensagem genérica ao cliente, para não revelar quais
+  // e-mails têm conta (ver src/app/api/auth/reset-password/route.ts).
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    console.error("Falha ao solicitar recuperação de senha:", body?.msg || body?.message || res.status);
+  }
+}
+
 let jwks: ReturnType<typeof createRemoteJWKSet> | null = null;
 function getJwks() {
   if (!JWKS_URL) throw new Error("SUPABASE_JWKS_URL não configurada em .env.local.");

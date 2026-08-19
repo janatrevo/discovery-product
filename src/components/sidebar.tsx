@@ -15,6 +15,7 @@ import {
   ScrollText,
   FileBarChart,
   Settings,
+  Kanban,
 } from "lucide-react";
 import { useProductTour } from "./product-tour";
 
@@ -35,6 +36,7 @@ const NAV = [
   { href: "/opportunities", label: "Discovery Board", icon: Target, tourId: "nav-opportunities" },
   { href: "/decisions", label: "Decision Log", icon: ScrollText, tourId: "nav-decisions" },
   { href: "/reports", label: "Reports", icon: FileBarChart, tourId: "nav-reports" },
+  { href: "/azure-devops", label: "Azure DevOps", icon: Kanban, tourId: "nav-azure-devops" },
   { href: "/settings", label: "Settings", icon: Settings, tourId: "nav-settings" },
 ];
 

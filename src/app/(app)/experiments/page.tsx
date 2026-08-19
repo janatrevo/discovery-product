@@ -3,7 +3,7 @@ import { getPageContext } from "@/lib/page-context";
 import { db } from "@/db";
 import { experiments, hypotheses } from "@/db/schema";
 import { eq, desc } from "drizzle-orm";
-import { Badge, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
+import { Badge, Button, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 
 const STATUS_COLOR: Record<string, "slate" | "sky" | "emerald"> = {
   planned: "slate",
@@ -29,6 +29,11 @@ export default async function ExperimentsPage() {
         <EmptyState
           title="Nenhum experimento ainda"
           description="Crie experimentos a partir da aba 'Experimentos' de uma hipótese."
+          action={
+            <Link href="/hypotheses">
+              <Button size="sm">Ver hipóteses</Button>
+            </Link>
+          }
         />
       ) : (
         <div className="space-y-2">

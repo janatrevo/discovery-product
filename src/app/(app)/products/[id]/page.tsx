@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/db";
-import { products } from "@/db/schema";
+import { products, simulationRuns, personas } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { getPageContext } from "@/lib/page-context";
 import { Badge, Button, Card, PageHeader } from "@/components/ui/primitives";
 import { deleteProduct } from "../actions";
+import { deleteSimulation } from "../../simulations/actions";
+import { unlinkProductFromPersona } from "../../personas/actions";
 
 function Block({ title, items }: { title: string; items?: string[] | null }) {
   if (!items || items.length === 0) return null;
@@ -26,6 +28,24 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
   const { project, role } = await getPageContext();
   const [product] = await db.select().from(products).where(eq(products.id, id)).limit(1);
   if (!product || product.projectId !== project.id) notFound();
+  const canDelete = role === "owner" || role === "editor";
+
+  // Antes disto, o botão "Excluir" chamava deleteProduct direto, que joga um
+  // Error quando checkProductDeletable acha algo vinculado (ver
+  // src/lib/delete-guards.ts) — o Next.js mostra isso como uma tela de
+  // "Runtime Error" cheia de stack trace, parecendo um bug, quando na
+  // verdade é a proteção funcionando (evita deixar uma simulação órfã).
+  // O problema real era não ter, nesta própria página, como ver ou excluir
+  // o que estava bloqueando — daí a pessoa ficar presa sem saber o que
+  // fazer. Agora a página busca essas simulações e deixa excluir cada uma
+  // direto por aqui, sem crash e sem precisar procurar em /simulations.
+  const [blockingSimulations, blockingPersonas] = canDelete
+    ? await Promise.all([
+        db.select().from(simulationRuns).where(eq(simulationRuns.productId, id)),
+        db.select().from(personas).where(eq(personas.productId, id)),
+      ])
+    : [[], []];
+  const canDeleteNow = canDelete && blockingSimulations.length === 0 && blockingPersonas.length === 0;
 
   return (
     <div className="max-w-3xl">
@@ -38,7 +58,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
             <Link href={`/products/${id}/edit`}>
               <Button variant="secondary">Editar</Button>
             </Link>
-            {(role === "owner" || role === "editor") && (
+            {canDeleteNow && (
               <form action={deleteProduct.bind(null, id)}>
                 <Button variant="danger" type="submit">
                   Excluir
@@ -48,6 +68,67 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
           </>
         }
       />
+      {canDelete && (blockingSimulations.length > 0 || blockingPersonas.length > 0) && (
+        <Card className="mb-4 border-amber-300 bg-amber-50">
+          <p className="text-sm font-medium text-amber-900">
+            Este produto não pode ser excluído ainda
+          </p>
+          <p className="mt-1 text-sm text-amber-800">
+            Desvincule (ou exclua, no caso de simulações) as referências abaixo para liberar a exclusão.
+          </p>
+
+          {blockingPersonas.length > 0 && (
+            <div className="mt-3">
+              <p className="text-xs font-semibold uppercase text-amber-700">
+                Personas ({blockingPersonas.length})
+              </p>
+              <div className="mt-1 space-y-2">
+                {blockingPersonas.map((p) => (
+                  <div
+                    key={p.id}
+                    className="flex items-center justify-between gap-2 rounded-md border border-amber-200 bg-white px-3 py-2"
+                  >
+                    <Link href={`/personas/${p.id}`} className="min-w-0 flex-1">
+                      <p className="truncate text-sm text-slate-800">{p.name}</p>
+                    </Link>
+                    <form action={unlinkProductFromPersona.bind(null, p.id, id)}>
+                      <Button type="submit" variant="ghost" size="sm">
+                        desvincular
+                      </Button>
+                    </form>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {blockingSimulations.length > 0 && (
+            <div className="mt-3">
+              <p className="text-xs font-semibold uppercase text-amber-700">
+                Simulações ({blockingSimulations.length})
+              </p>
+              <div className="mt-1 space-y-2">
+                {blockingSimulations.map((s) => (
+                  <div
+                    key={s.id}
+                    className="flex items-center justify-between gap-2 rounded-md border border-amber-200 bg-white px-3 py-2"
+                  >
+                    <Link href={`/simulations/${s.id}`} className="min-w-0 flex-1">
+                      <p className="truncate text-sm text-slate-800">{s.scenario || "Cenário sem título"}</p>
+                      <p className="truncate text-xs text-slate-400">{s.task}</p>
+                    </Link>
+                    <form action={deleteSimulation.bind(null, s.id, `/products/${id}`)}>
+                      <Button type="submit" variant="ghost" size="sm">
+                        excluir simulação
+                      </Button>
+                    </form>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </Card>
+      )}
       <Card className="mb-4 space-y-3">
         {product.problemSolved && (
           <div>

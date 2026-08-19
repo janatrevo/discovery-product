@@ -12,7 +12,20 @@ const schema = z.object({
   orgName: z.string().min(2, "Nome da organização muito curto"),
 });
 
+// Cadastro público desativado em produção — a ferramenta é interna agora, e
+// só administradores (papel "owner") podem trazer gente nova, via convite
+// em Settings (ver src/app/(app)/settings/actions.ts). A rota continua ativa
+// fora de produção porque o helper signup() do e2e/helpers.ts depende dela
+// para criar a conta de cada teste (rodando contra `npm run dev`, nunca
+// contra um build de produção).
 export async function POST(req: NextRequest) {
+  if (process.env.NODE_ENV === "production") {
+    return NextResponse.json(
+      { error: "Cadastro público desativado. Peça um convite a um administrador." },
+      { status: 403 }
+    );
+  }
+
   const body = await req.json();
   const parsed = schema.safeParse(body);
   if (!parsed.success) {

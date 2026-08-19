@@ -12,6 +12,18 @@ import { nanoid } from "nanoid";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
+// Usado a partir da tela de Hipótese quando um survey é uma das razões que
+// bloqueiam a exclusão (ver checkHypothesisDeletable) — desvincula sem
+// apagar o survey (ele continua em Research & Testing, só solta a
+// hipótese).
+export async function unlinkHypothesisFromSurvey(surveyId: string, hypothesisId: string) {
+  const { role } = await getPageContext();
+  if (role !== "owner" && role !== "editor") throw new Error("Sem permissão.");
+  await db.update(surveys).set({ hypothesisId: null }).where(eq(surveys.id, surveyId));
+  revalidatePath(`/research/surveys/${surveyId}`);
+  revalidatePath(`/hypotheses/${hypothesisId}`);
+}
+
 export async function createSurvey(formData: FormData) {
   const { user, project, role } = await getPageContext();
   if (role === "viewer") throw new Error("Sem permissão.");

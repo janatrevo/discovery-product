@@ -10,6 +10,7 @@ import { Button, Card, Field, Input, Label } from "@/components/ui/primitives";
 export default function DefinirSenhaPage() {
   const router = useRouter();
   const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [linkType, setLinkType] = useState<"invite" | "recovery" | "signup" | null>(null);
   const [status, setStatus] = useState<"checking" | "ready" | "invalid">("checking");
   const [form, setForm] = useState({ name: "", password: "", confirm: "" });
   const [error, setError] = useState<string | null>(null);
@@ -22,6 +23,7 @@ export default function DefinirSenhaPage() {
     const type = params.get("type");
     if (token && (type === "invite" || type === "recovery" || type === "signup")) {
       setAccessToken(token);
+      setLinkType(type);
       setStatus("ready");
     } else {
       setStatus("invalid");
@@ -39,7 +41,7 @@ export default function DefinirSenhaPage() {
     const res = await fetch("/api/auth/accept-invite", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ accessToken, name: form.name, password: form.password }),
+      body: JSON.stringify({ accessToken, name: form.name, password: form.password, type: linkType }),
     });
     setLoading(false);
     if (!res.ok) {
@@ -69,15 +71,19 @@ export default function DefinirSenhaPage() {
     );
   }
 
+  const isRecovery = linkType === "recovery";
+
   return (
     <Card>
       <form onSubmit={onSubmit}>
+        {!isRecovery && (
+          <Field>
+            <Label>Seu nome</Label>
+            <Input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          </Field>
+        )}
         <Field>
-          <Label>Seu nome</Label>
-          <Input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-        </Field>
-        <Field>
-          <Label>Criar senha (mín. 8 caracteres)</Label>
+          <Label>{isRecovery ? "Nova senha (mín. 8 caracteres)" : "Criar senha (mín. 8 caracteres)"}</Label>
           <Input
             required
             type="password"
@@ -98,7 +104,13 @@ export default function DefinirSenhaPage() {
         </Field>
         {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
         <Button type="submit" disabled={loading} className="w-full justify-center">
-          {loading ? "Criando senha..." : "Criar senha e entrar"}
+          {loading
+            ? isRecovery
+              ? "Salvando nova senha..."
+              : "Criando senha..."
+            : isRecovery
+              ? "Salvar nova senha e entrar"
+              : "Criar senha e entrar"}
         </Button>
       </form>
     </Card>

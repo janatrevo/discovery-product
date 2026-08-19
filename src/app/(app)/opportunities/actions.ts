@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import { getPageContext } from "@/lib/page-context";
 import { computePriorityScore } from "@/lib/priority-score";
 import { recomputeHypothesis } from "@/lib/recompute-hypothesis";
+import { getFeature, updateFeature, withAbTag } from "@/lib/azure-devops";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
@@ -67,6 +68,30 @@ export async function createOpportunity(formData: FormData) {
 
   revalidatePath("/opportunities");
   redirect(`/opportunities/${created.id}`);
+}
+
+// Usado a partir da tela de Persona quando uma Oportunidade é uma das
+// razões que bloqueiam a exclusão (ver checkPersonaDeletable) — desvincula
+// sem apagar a oportunidade (ela continua no Discovery Board, só solta a
+// persona).
+export async function unlinkPersonaFromOpportunity(opportunityId: string, personaId: string) {
+  const { role } = await getPageContext();
+  if (role !== "owner" && role !== "editor") throw new Error("Sem permissão.");
+  await db.update(opportunities).set({ personaId: null }).where(eq(opportunities.id, opportunityId));
+  revalidatePath("/opportunities", "layout");
+  revalidatePath(`/personas/${personaId}`);
+}
+
+// Usado a partir da tela de Hipótese quando uma Oportunidade é uma das
+// razões que bloqueiam a exclusão (ver checkHypothesisDeletable) —
+// desvincula sem apagar a oportunidade (ela continua no Discovery Board, só
+// solta a hipótese).
+export async function unlinkHypothesisFromOpportunity(opportunityId: string, hypothesisId: string) {
+  const { role } = await getPageContext();
+  if (role !== "owner" && role !== "editor") throw new Error("Sem permissão.");
+  await db.update(opportunities).set({ hypothesisId: null }).where(eq(opportunities.id, opportunityId));
+  revalidatePath("/opportunities", "layout");
+  revalidatePath(`/hypotheses/${hypothesisId}`);
 }
 
 export async function updateOpportunityStatus(opportunityId: string, formData: FormData) {
@@ -167,4 +192,53 @@ export async function updateOpportunityScores(opportunityId: string, formData: F
 
   revalidatePath(`/opportunities/${opportunityId}`);
   revalidatePath("/opportunities");
+}
+
+// Datas de planejamento usadas só pelo Gráfico Gantt de roadmap (ver
+// /azure-devops/roadmap) — não existe campo nativo garantido de Start/Target
+// Date no Azure DevOps (depende do processo configurado lá), então o
+// discovery-app guarda e mostra essas datas por conta própria.
+export async function updatePlannedDates(opportunityId: string, formData: FormData) {
+  const { role } = await getPageContext();
+  if (role !== "owner") throw new Error("Só administradores (Owner) podem editar a timeline do roadmap.");
+
+  const startRaw = String(formData.get("plannedStartDate") || "");
+  const endRaw = String(formData.get("plannedEndDate") || "");
+  const plannedStartDate = startRaw ? new Date(startRaw) : null;
+  const plannedEndDate = endRaw ? new Date(endRaw) : null;
+
+  if (plannedStartDate && plannedEndDate && plannedEndDate < plannedStartDate) {
+    throw new Error("A data de entrega não pode ser antes da data de início.");
+  }
+
+  await db.update(opportunities).set({ plannedStartDate, plannedEndDate }).where(eq(opportunities.id, opportunityId));
+  revalidatePath("/azure-devops/roadmap");
+  revalidatePath(`/opportunities/${opportunityId}`);
+}
+
+// Decisão de "sucesso da funcionalidade" pós-teste A/B: continua em teste,
+// deve ser mantida permanentemente, ou deve ser removida. Guardada aqui no
+// discovery-app e espelhada como tag no card do Azure DevOps (prefixo "ab:")
+// quando a oportunidade já tiver sido enviada como Feature — assim aparece
+// direto no board pra quem só olha o Azure DevOps.
+export async function setAbTestDecision(opportunityId: string, formData: FormData) {
+  const { project, role } = await getPageContext();
+  if (role !== "owner") throw new Error("Só administradores (Owner) podem registrar esta decisão.");
+
+  const decision = String(formData.get("abTestDecision") || "testing") as "testing" | "keep" | "remove";
+  if (!["testing", "keep", "remove"].includes(decision)) throw new Error("Decisão inválida.");
+
+  const [opp] = await db.select().from(opportunities).where(eq(opportunities.id, opportunityId)).limit(1);
+  if (!opp || opp.projectId !== project.id) throw new Error("Oportunidade não encontrada.");
+
+  await db.update(opportunities).set({ abTestDecision: decision }).where(eq(opportunities.id, opportunityId));
+
+  if (opp.azureFeatureId) {
+    const feature = await getFeature(opp.azureFeatureId);
+    await updateFeature(opp.azureFeatureId, { tags: withAbTag(feature.tags, decision) });
+  }
+
+  revalidatePath(`/opportunities/${opportunityId}`);
+  revalidatePath("/azure-devops");
+  revalidatePath("/azure-devops/roadmap");
 }

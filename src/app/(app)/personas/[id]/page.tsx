@@ -1,12 +1,29 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/db";
-import { personas, evidence, personaVersions } from "@/db/schema";
-import { eq, desc } from "drizzle-orm";
+import {
+  personas,
+  products,
+  evidence,
+  personaVersions,
+  experiments,
+  interviews,
+  usabilityFindings,
+  opportunities,
+  simulationRuns,
+  simulationResponses,
+} from "@/db/schema";
+import { eq, desc, inArray } from "drizzle-orm";
 import { getPageContext } from "@/lib/page-context";
 import { Badge, Button, Card, PageHeader } from "@/components/ui/primitives";
 import { OriginBadge } from "@/components/origin-badge";
 import { deletePersona } from "../actions";
+import { unlinkPersonaFromExperiment } from "../../experiments/actions";
+import { unlinkPersonaFromEvidence } from "../../repository/actions";
+import { unlinkPersonaFromInterview } from "../../research/interviews/actions";
+import { unlinkPersonaFromFinding } from "../../usability/actions";
+import { unlinkPersonaFromOpportunity } from "../../opportunities/actions";
+import { deleteSimulation } from "../../simulations/actions";
 
 function Block({ title, items }: { title: string; items?: string[] | null }) {
   if (!items || items.length === 0) return null;
@@ -32,12 +49,44 @@ export default async function PersonaDetailPage({ params }: { params: Promise<{ 
     .limit(1);
   if (!persona || persona.projectId !== project.id) notFound();
 
-  const linkedEvidence = await db.select().from(evidence).where(eq(evidence.personaId, id));
-  const versions = await db
-    .select()
-    .from(personaVersions)
-    .where(eq(personaVersions.personaId, id))
-    .orderBy(desc(personaVersions.createdAt));
+  const [linkedProduct] = persona.productId
+    ? await db.select().from(products).where(eq(products.id, persona.productId)).limit(1)
+    : [];
+
+  // Espelha exatamente o que checkPersonaDeletable (src/lib/delete-guards.ts)
+  // verifica antes de excluir — antes disso, quem tentasse excluir uma
+  // persona vinculada só via um "Runtime Error" cheio de stack trace, sem
+  // saber o que estava bloqueando nem como resolver. Agora a própria página
+  // mostra cada vínculo com um jeito de desvincular (ou excluir, no caso de
+  // simulação) direto por aqui. Todas essas consultas rodam em paralelo
+  // (Promise.all) — em série elas deixavam esta página visivelmente mais
+  // lenta para renderizar do que as outras.
+  const canDelete = role === "owner" || role === "editor";
+  const [linkedEvidence, versions, blockingExperiments, blockingInterviews, blockingFindings, blockingOpportunities, blockingResponseRows] =
+    await Promise.all([
+      db.select().from(evidence).where(eq(evidence.personaId, id)),
+      db.select().from(personaVersions).where(eq(personaVersions.personaId, id)).orderBy(desc(personaVersions.createdAt)),
+      canDelete ? db.select().from(experiments).where(eq(experiments.personaId, id)) : Promise.resolve([]),
+      canDelete ? db.select().from(interviews).where(eq(interviews.personaId, id)) : Promise.resolve([]),
+      canDelete ? db.select().from(usabilityFindings).where(eq(usabilityFindings.personaId, id)) : Promise.resolve([]),
+      canDelete ? db.select().from(opportunities).where(eq(opportunities.personaId, id)) : Promise.resolve([]),
+      canDelete
+        ? db.select({ simulationRunId: simulationResponses.simulationRunId }).from(simulationResponses).where(eq(simulationResponses.personaId, id))
+        : Promise.resolve([]),
+    ]);
+  const blockingRunIds = [...new Set(blockingResponseRows.map((r) => r.simulationRunId))];
+  const blockingSimulationRuns = blockingRunIds.length
+    ? await db.select().from(simulationRuns).where(inArray(simulationRuns.id, blockingRunIds))
+    : [];
+  const hasBlockers =
+    canDelete &&
+    (linkedEvidence.length > 0 ||
+      blockingExperiments.length > 0 ||
+      blockingInterviews.length > 0 ||
+      blockingFindings.length > 0 ||
+      blockingOpportunities.length > 0 ||
+      blockingSimulationRuns.length > 0);
+  const canDeleteNow = canDelete && !hasBlockers;
 
   return (
     <div className="max-w-3xl">
@@ -49,7 +98,7 @@ export default async function PersonaDetailPage({ params }: { params: Promise<{ 
             <Link href={`/personas/${id}/edit`}>
               <Button variant="secondary">Editar</Button>
             </Link>
-            {(role === "owner" || role === "editor") && (
+            {canDeleteNow && (
               <form action={deletePersona.bind(null, id)}>
                 <Button variant="danger" type="submit">
                   Excluir
@@ -60,11 +109,161 @@ export default async function PersonaDetailPage({ params }: { params: Promise<{ 
         }
       />
 
+      {hasBlockers && (
+        <Card className="mb-4 border-amber-300 bg-amber-50">
+          <p className="text-sm font-medium text-amber-900">Esta persona não pode ser excluída ainda</p>
+          <p className="mt-1 text-sm text-amber-800">
+            Desvincule (ou exclua, no caso de simulações) as referências abaixo para liberar a exclusão.
+          </p>
+
+          {blockingExperiments.length > 0 && (
+            <div className="mt-3">
+              <p className="text-xs font-semibold uppercase text-amber-700">
+                Experimentos ({blockingExperiments.length})
+              </p>
+              <div className="mt-1 space-y-2">
+                {blockingExperiments.map((e) => (
+                  <div key={e.id} className="flex items-center justify-between gap-2 rounded-md border border-amber-200 bg-white px-3 py-2">
+                    <Link href={`/experiments/${e.id}`} className="min-w-0 flex-1">
+                      <p className="truncate text-sm text-slate-800">{e.objective || "Experimento sem objetivo definido"}</p>
+                    </Link>
+                    <form action={unlinkPersonaFromExperiment.bind(null, e.id, id)}>
+                      <Button type="submit" variant="ghost" size="sm">
+                        desvincular
+                      </Button>
+                    </form>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {blockingInterviews.length > 0 && (
+            <div className="mt-3">
+              <p className="text-xs font-semibold uppercase text-amber-700">
+                Entrevistas ({blockingInterviews.length})
+              </p>
+              <div className="mt-1 space-y-2">
+                {blockingInterviews.map((i) => (
+                  <div key={i.id} className="flex items-center justify-between gap-2 rounded-md border border-amber-200 bg-white px-3 py-2">
+                    <Link href={i.guideId ? `/research/interviews/${i.guideId}` : "/research/interviews"} className="min-w-0 flex-1">
+                      <p className="truncate text-sm text-slate-800">{i.intervieweeRef || "Entrevista sem identificação"}</p>
+                    </Link>
+                    <form action={unlinkPersonaFromInterview.bind(null, i.id, id)}>
+                      <Button type="submit" variant="ghost" size="sm">
+                        desvincular
+                      </Button>
+                    </form>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {linkedEvidence.length > 0 && (
+            <div className="mt-3">
+              <p className="text-xs font-semibold uppercase text-amber-700">
+                Evidências ({linkedEvidence.length})
+              </p>
+              <div className="mt-1 space-y-2">
+                {linkedEvidence.map((e) => (
+                  <div key={e.id} className="flex items-center justify-between gap-2 rounded-md border border-amber-200 bg-white px-3 py-2">
+                    <Link href="/repository" className="min-w-0 flex-1">
+                      <p className="truncate text-sm text-slate-800">{e.source}</p>
+                    </Link>
+                    <form action={unlinkPersonaFromEvidence.bind(null, e.id, id)}>
+                      <Button type="submit" variant="ghost" size="sm">
+                        desvincular
+                      </Button>
+                    </form>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {blockingFindings.length > 0 && (
+            <div className="mt-3">
+              <p className="text-xs font-semibold uppercase text-amber-700">
+                Achados de usabilidade ({blockingFindings.length})
+              </p>
+              <div className="mt-1 space-y-2">
+                {blockingFindings.map((f) => (
+                  <div key={f.id} className="flex items-center justify-between gap-2 rounded-md border border-amber-200 bg-white px-3 py-2">
+                    <Link href={`/usability/${f.usabilityTestId}`} className="min-w-0 flex-1">
+                      <p className="truncate text-sm text-slate-800">{f.problem}</p>
+                    </Link>
+                    <form action={unlinkPersonaFromFinding.bind(null, f.id, id)}>
+                      <Button type="submit" variant="ghost" size="sm">
+                        desvincular
+                      </Button>
+                    </form>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {blockingOpportunities.length > 0 && (
+            <div className="mt-3">
+              <p className="text-xs font-semibold uppercase text-amber-700">
+                Oportunidades ({blockingOpportunities.length})
+              </p>
+              <div className="mt-1 space-y-2">
+                {blockingOpportunities.map((o) => (
+                  <div key={o.id} className="flex items-center justify-between gap-2 rounded-md border border-amber-200 bg-white px-3 py-2">
+                    <Link href={`/opportunities/${o.id}`} className="min-w-0 flex-1">
+                      <p className="truncate text-sm text-slate-800">{o.title}</p>
+                    </Link>
+                    <form action={unlinkPersonaFromOpportunity.bind(null, o.id, id)}>
+                      <Button type="submit" variant="ghost" size="sm">
+                        desvincular
+                      </Button>
+                    </form>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {blockingSimulationRuns.length > 0 && (
+            <div className="mt-3">
+              <p className="text-xs font-semibold uppercase text-amber-700">
+                Simulações ({blockingSimulationRuns.length})
+              </p>
+              <div className="mt-1 space-y-2">
+                {blockingSimulationRuns.map((s) => (
+                  <div key={s.id} className="flex items-center justify-between gap-2 rounded-md border border-amber-200 bg-white px-3 py-2">
+                    <Link href={`/simulations/${s.id}`} className="min-w-0 flex-1">
+                      <p className="truncate text-sm text-slate-800">{s.scenario || "Cenário sem título"}</p>
+                    </Link>
+                    <form action={deleteSimulation.bind(null, s.id, `/personas/${id}`)}>
+                      <Button type="submit" variant="ghost" size="sm">
+                        excluir simulação
+                      </Button>
+                    </form>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-1 text-xs text-amber-700">
+                Respostas de simulação não podem ser desvinculadas individualmente — só excluindo a simulação
+                inteira (isso também remove as respostas de outras personas que tenham participado da mesma rodada).
+              </p>
+            </div>
+          )}
+        </Card>
+      )}
+
       <div className="mb-4 flex items-center gap-2">
         <Badge color={persona.origin === "research_based" ? "emerald" : "amber"}>
           {persona.origin === "research_based" ? "Research-based" : "Sintética — não validada por pesquisa"}
         </Badge>
         <span className="text-xs text-slate-400">{persona.completeness}% preenchido</span>
+        {linkedProduct && (
+          <Link href={`/products/${linkedProduct.id}`}>
+            <Badge color="indigo">Produto: {linkedProduct.name}</Badge>
+          </Link>
+        )}
       </div>
 
       {persona.jtbdMain && (

@@ -57,10 +57,12 @@ export default function LoginPage() {
         </Button>
       </form>
       <p className="mt-4 text-center text-sm text-slate-500">
-        Ainda não tem conta?{" "}
-        <Link href="/signup" className="font-medium text-indigo-600">
-          Criar conta
+        <Link href="/esqueci-senha" className="font-medium text-indigo-600">
+          Esqueci minha senha
         </Link>
+      </p>
+      <p className="mt-2 text-center text-xs text-slate-400">
+        Ferramenta interna — o acesso é só por convite de um administrador.
       </p>
     </Card>
   );

@@ -101,10 +101,10 @@ export default async function SettingsPage() {
             </li>
           ))}
         </ul>
-        {(role === "owner" || role === "editor") && (
+        {role === "owner" && (
           <form action={inviteMember} className="flex items-end gap-2">
             <div className="flex-1">
-              <Label>E-mail de quem já tem conta</Label>
+              <Label>E-mail de quem você quer convidar</Label>
               <Input name="email" type="email" required />
             </div>
             <div className="w-40">
@@ -118,6 +118,12 @@ export default async function SettingsPage() {
             </div>
             <Button type="submit">Adicionar</Button>
           </form>
+        )}
+        {role === "owner" && (
+          <p className="mt-2 text-xs text-slate-400">
+            Se a pessoa ainda não tiver conta, enviamos um convite por e-mail para ela criar a senha e
+            entrar direto neste projeto, no papel escolhido.
+          </p>
         )}
       </Card>
     </div>
