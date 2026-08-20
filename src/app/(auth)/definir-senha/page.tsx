@@ -41,7 +41,15 @@ export default function DefinirSenhaPage() {
     const res = await fetch("/api/auth/accept-invite", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ accessToken, name: form.name, password: form.password, type: linkType }),
+      body: JSON.stringify({
+        accessToken,
+        // Na recuperação de senha este campo nem é exibido (fica "") — não
+        // manda "" pro servidor, senão a validação de nome (min. 2
+        // caracteres) rejeita a requisição mesmo o campo sendo opcional.
+        name: form.name.trim() || undefined,
+        password: form.password,
+        type: linkType,
+      }),
     });
     setLoading(false);
     if (!res.ok) {

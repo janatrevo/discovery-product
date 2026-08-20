@@ -8,7 +8,12 @@ import { verifySupabaseAccessToken } from "@/lib/supabase-admin";
 
 const schema = z.object({
   accessToken: z.string().min(10),
-  name: z.string().min(2, "Nome muito curto").optional(),
+  // Na tela de recuperação de senha o campo "nome" nem aparece (ver
+  // definir-senha/page.tsx), então o client manda name: "" — sem o
+  // preprocess, "" cai no .min(2) do optional() (optional só permite
+  // undefined, não string vazia) e a recuperação de senha sempre falhava
+  // com "Nome muito curto" (HTTP 400), mesmo sem o usuário ver o campo.
+  name: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(2, "Nome muito curto").optional()),
   password: z.string().min(8, "Senha precisa de ao menos 8 caracteres"),
   // Distingue convite (concede acesso a projeto) de recuperação de senha
   // (só troca a senha, nunca mexe em project_memberships). `undefined` cai no
