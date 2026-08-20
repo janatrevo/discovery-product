@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { getPageContext } from "@/lib/page-context";
 import { db } from "@/db";
-import { hypotheses } from "@/db/schema";
-import { eq, desc } from "drizzle-orm";
-import { Badge, Button, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
+import { hypotheses, hypothesisProducts, products } from "@/db/schema";
+import { eq, asc, desc } from "drizzle-orm";
+import { Button, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { STATUS_LABELS, STATUS_COLORS, HYPOTHESIS_TYPES } from "@/lib/hypothesis-types";
 import { computeStalenessFromReceipt } from "@/lib/staleness";
 import type { ConfidenceReceipt } from "@/lib/confidence";
+import { HypothesisBoard, type HypothesisCardData } from "@/components/hypothesis-priority-column";
 
 const COLUMNS = ["not_tested", "investigating", "partially_validated", "validated", "invalidated", "inconclusive"];
 
@@ -17,11 +18,26 @@ export default async function HypothesesPage({
 }) {
   const { status: highlightStatus } = await searchParams;
   const { project } = await getPageContext();
-  const list = await db
-    .select()
-    .from(hypotheses)
-    .where(eq(hypotheses.projectId, project.id))
-    .orderBy(desc(hypotheses.updatedAt));
+  const [list, productLinks] = await Promise.all([
+    db
+      .select()
+      .from(hypotheses)
+      .where(eq(hypotheses.projectId, project.id))
+      .orderBy(asc(hypotheses.priorityOrder), desc(hypotheses.updatedAt)),
+    db
+      .select({ hypothesisId: hypothesisProducts.hypothesisId, product: products })
+      .from(hypothesisProducts)
+      .innerJoin(products, eq(products.id, hypothesisProducts.productId))
+      .innerJoin(hypotheses, eq(hypotheses.id, hypothesisProducts.hypothesisId))
+      .where(eq(hypotheses.projectId, project.id)),
+  ]);
+
+  const productsByHypothesis = new Map<string, (typeof productLinks)[number]["product"][]>();
+  for (const link of productLinks) {
+    const arr = productsByHypothesis.get(link.hypothesisId) ?? [];
+    arr.push(link.product);
+    productsByHypothesis.set(link.hypothesisId, arr);
+  }
 
   const typeLabel = (t: string) => HYPOTHESIS_TYPES.find((h) => h.value === t)?.label ?? t;
 
@@ -48,47 +64,33 @@ export default async function HypothesesPage({
           }
         />
       ) : (
-        <div className="flex gap-4 overflow-x-auto pb-4">
-          {COLUMNS.map((status) => {
-            const items = list.filter((h) => h.status === status);
-            return (
-              <div
-                key={status}
-                className={`w-72 shrink-0 rounded-xl p-2 ${
-                  highlightStatus === status ? "bg-indigo-50 ring-1 ring-indigo-300" : "bg-slate-100/60"
-                }`}
-              >
-                <div className="mb-2 flex items-center justify-between px-1">
-                  <Badge color={STATUS_COLORS[status]}>{STATUS_LABELS[status]}</Badge>
-                  <span className="text-xs text-slate-400">{items.length}</span>
-                </div>
-                <div className="space-y-2">
-                  {items.map((h) => {
-                    const staleness = computeStalenessFromReceipt(h.confidenceReceipt as ConfidenceReceipt | null);
-                    return (
-                      <Link key={h.id} href={`/hypotheses/${h.id}`}>
-                        <Card className="hover:shadow-md">
-                          <div className="flex items-start justify-between gap-2">
-                            <p className="text-sm font-medium text-slate-900">{h.title}</p>
-                            {staleness.isStale && (
-                              <span title={`Evidência mais recente tem ${staleness.daysSinceLatest} dias`}>
-                                <Badge color="amber">⏱ revalidar</Badge>
-                              </span>
-                            )}
-                          </div>
-                          <p className="mt-1 text-xs text-slate-400">{typeLabel(h.type)}</p>
-                          <p className="mt-2 text-xs font-medium text-slate-500">
-                            Confiança: {h.confidenceScore ?? 0}
-                          </p>
-                        </Card>
-                      </Link>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        <HypothesisBoard
+          columns={COLUMNS.map((status) => ({
+            status,
+            label: STATUS_LABELS[status],
+            color: STATUS_COLORS[status],
+            highlighted: highlightStatus === status,
+          }))}
+          itemsByStatus={Object.fromEntries(
+            COLUMNS.map((status) => [
+              status,
+              list
+                .filter((h) => h.status === status)
+                .map((h): HypothesisCardData => {
+                  const staleness = computeStalenessFromReceipt(h.confidenceReceipt as ConfidenceReceipt | null);
+                  return {
+                    id: h.id,
+                    title: h.title,
+                    typeLabel: typeLabel(h.type),
+                    confidenceScore: Number(h.confidenceScore ?? 0),
+                    isStale: staleness.isStale,
+                    daysSinceLatest: staleness.daysSinceLatest ?? undefined,
+                    products: (productsByHypothesis.get(h.id) ?? []).map((p) => ({ id: p.id, name: p.name })),
+                  };
+                }),
+            ])
+          )}
+        />
       )}
     </div>
   );

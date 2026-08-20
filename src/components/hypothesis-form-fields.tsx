@@ -10,15 +10,19 @@ export function HypothesisFormFields({
   defaultValues: d,
   personaOptions,
   productOptions,
+  hypothesisOptions = [],
   selectedPersonaIds = [],
   selectedProductIds = [],
 }: {
   defaultValues?: Hypothesis;
   personaOptions: Persona[];
   productOptions: Product[];
+  hypothesisOptions?: Hypothesis[];
   selectedPersonaIds?: string[];
   selectedProductIds?: string[];
 }) {
+  const productNameById = new Map(productOptions.map((p) => [p.id, p.name]));
+
   return (
     <div className="space-y-4">
       <Card>
@@ -51,6 +55,19 @@ export function HypothesisFormFields({
           </Field>
         </div>
         <Field>
+          <Label>Hipótese relacionada</Label>
+          <Select name="relatedHypothesisId" defaultValue={d?.relatedHypothesisId ?? ""}>
+            <option value="">— nenhuma —</option>
+            {hypothesisOptions
+              .filter((h) => h.id !== d?.id)
+              .map((h) => (
+                <option key={h.id} value={h.id}>
+                  {h.title}
+                </option>
+              ))}
+          </Select>
+        </Field>
+        <Field>
           <Label>Contexto</Label>
           <Textarea name="context" rows={2} defaultValue={d?.context ?? ""} />
         </Field>
@@ -68,12 +85,16 @@ export function HypothesisFormFields({
             defaultValue={selectedPersonaIds}
             className="h-32 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
           >
-            {personaOptions.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-                {p.jobTitle ? ` — ${p.jobTitle}` : ""} {p.origin === "synthetic" ? "(sintética)" : ""}
-              </option>
-            ))}
+            {personaOptions.map((p) => {
+              const productName = p.productId ? productNameById.get(p.productId) : undefined;
+              return (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                  {p.jobTitle ? ` — ${p.jobTitle}` : ""}
+                  {productName ? ` — ${productName}` : ""} {p.origin === "synthetic" ? "(sintética)" : ""}
+                </option>
+              );
+            })}
           </select>
         </Field>
         <Field>

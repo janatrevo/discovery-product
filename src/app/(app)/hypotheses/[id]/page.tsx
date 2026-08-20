@@ -101,6 +101,13 @@ export default async function HypothesisWorkspacePage({
       : Promise.resolve([]),
   ]);
 
+  // "Hipótese relacionada" é um link de verdade pra outra hipótese do
+  // projeto (ver src/db/schema.ts) — busca o título pra exibir clicável em
+  // vez de só guardar o id.
+  const relatedHyp = hyp.relatedHypothesisId
+    ? await db.select().from(hypotheses).where(eq(hypotheses.id, hyp.relatedHypothesisId)).limit(1).then((r) => r[0])
+    : null;
+
   const hasBlockers =
     canDelete &&
     (blockingExperiments.length > 0 ||
@@ -139,6 +146,17 @@ export default async function HypothesisWorkspacePage({
           </>
         }
       />
+
+      {linkedProducts.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <span className="text-xs font-medium uppercase tracking-wide text-slate-400">Produto:</span>
+          {linkedProducts.map((p) => (
+            <Link key={p.product.id} href={`/products/${p.product.id}`}>
+              <Badge color="indigo">{p.product.name}</Badge>
+            </Link>
+          ))}
+        </div>
+      )}
 
       {hasBlockers && (
         <Card className="mb-4 border-amber-300 bg-amber-50">
@@ -356,6 +374,31 @@ export default async function HypothesisWorkspacePage({
           )}
 
           <ConfidenceReceiptCard hypothesis={hyp} />
+
+          {(hyp.problemRef || hyp.solutionRef || relatedHyp) && (
+            <Card className="space-y-2">
+              {hyp.problemRef && (
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Problema relacionado</p>
+                  <p className="text-sm text-slate-700">{hyp.problemRef}</p>
+                </div>
+              )}
+              {hyp.solutionRef && (
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Solução relacionada</p>
+                  <p className="text-sm text-slate-700">{hyp.solutionRef}</p>
+                </div>
+              )}
+              {relatedHyp && (
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Hipótese relacionada</p>
+                  <Link href={`/hypotheses/${relatedHyp.id}`} className="text-sm text-indigo-700 hover:underline">
+                    {relatedHyp.title}
+                  </Link>
+                </div>
+              )}
+            </Card>
+          )}
 
           <Card>
             <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400">Personas & Produtos</p>

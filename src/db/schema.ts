@@ -21,6 +21,7 @@ import {
   jsonb,
   pgEnum,
   primaryKey,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
@@ -274,6 +275,24 @@ export const hypotheses = pgTable("hypotheses", {
   status: hypothesisStatusEnum("status").notNull().default("not_tested"),
   problemRef: text("problem_ref"),
   solutionRef: text("solution_ref"),
+  // Vínculo opcional com outra hipótese já cadastrada no projeto (ex.: uma
+  // hipótese de solução ligada à hipótese de problema que ela busca
+  // resolver), pra poder navegar/clicar em vez de descrever a relação em
+  // texto livre. onDelete "set null" porque essa ligação é só informativa —
+  // excluir a hipótese referenciada não deveria travar a exclusão dela
+  // (diferente das ligações em checkHypothesisDeletable).
+  relatedHypothesisId: uuid("related_hypothesis_id").references((): AnyPgColumn => hypotheses.id, {
+    onDelete: "set null",
+  }),
+  // Posição manual na fila de priorização (drag-and-drop na tela de lista,
+  // ver hypothesis-priority-column.tsx) — quanto menor, mais prioritário.
+  // Escopo é dentro da própria coluna de status (a ordenação é sempre
+  // filtrada por status antes de usar este campo), então números podem se
+  // repetir entre colunas diferentes sem problema. Default 0 pra hipóteses
+  // criadas antes desse campo existir não muda a ordem visível: o
+  // desempate por updatedAt desc na query mantém o comportamento antigo até
+  // alguém arrastar um card.
+  priorityOrder: integer("priority_order").default(0).notNull(),
   context: text("context"),
   validationMethod: text("validation_method"),
   // Calculado deterministicamente — nunca editado à mão (ver src/lib/confidence.ts)

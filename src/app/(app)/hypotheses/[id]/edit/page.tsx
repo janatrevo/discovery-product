@@ -13,9 +13,10 @@ export default async function EditHypothesisPage({ params }: { params: Promise<{
   const [hyp] = await db.select().from(hypotheses).where(eq(hypotheses.id, id)).limit(1);
   if (!hyp || hyp.projectId !== project.id) notFound();
 
-  const [personaOptions, productOptions, selectedPersonas] = await Promise.all([
+  const [personaOptions, productOptions, hypothesisOptions, selectedPersonas] = await Promise.all([
     db.select().from(personas).where(eq(personas.projectId, project.id)),
     db.select().from(products).where(eq(products.projectId, project.id)),
+    db.select().from(hypotheses).where(eq(hypotheses.projectId, project.id)),
     db.select().from(hypothesisPersonas).where(eq(hypothesisPersonas.hypothesisId, id)),
   ]);
 
@@ -27,6 +28,7 @@ export default async function EditHypothesisPage({ params }: { params: Promise<{
           defaultValues={hyp}
           personaOptions={personaOptions}
           productOptions={productOptions}
+          hypothesisOptions={hypothesisOptions}
           selectedPersonaIds={selectedPersonas.map((p) => p.personaId)}
         />
         <div className="mt-6 flex gap-2">
