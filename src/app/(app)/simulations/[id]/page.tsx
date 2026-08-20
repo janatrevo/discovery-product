@@ -148,7 +148,10 @@ export default async function SimulationDetailPage({ params }: { params: Promise
           const data = dataByPersona.get(persona.id) ?? {};
           return (
             <Card key={persona.id}>
-              <p className="mb-2 text-sm font-semibold text-slate-800">{persona.name}</p>
+              <p className="mb-2 text-sm font-semibold text-slate-800">
+                {persona.name}
+                {persona.jobTitle && <span className="font-normal text-slate-500"> — {persona.jobTitle}</span>}
+              </p>
               <div className="space-y-2 text-sm">
                 {TEXT_ROWS.map(({ key, label }) => (
                   <div key={key}>

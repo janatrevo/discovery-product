@@ -47,6 +47,7 @@ export default async function NewUsabilityTestPage({
               {personaOptions.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
+                  {p.jobTitle ? ` — ${p.jobTitle}` : ""}
                 </option>
               ))}
             </select>

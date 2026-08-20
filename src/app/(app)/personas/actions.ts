@@ -51,6 +51,7 @@ export async function createPersona(formData: FormData) {
     projectId: project.id,
     productId: String(formData.get("productId") || "") || null,
     name: String(formData.get("name") || ""),
+    jobTitle: String(formData.get("jobTitle") || ""),
     origin: String(formData.get("origin") || "synthetic"),
     shortDescription: String(formData.get("shortDescription") || ""),
     jtbdMain: String(formData.get("jtbdMain") || ""),
@@ -92,6 +93,7 @@ export async function updatePersona(personaId: string, formData: FormData) {
   const values: Record<string, unknown> = {
     productId: String(formData.get("productId") || "") || null,
     name: String(formData.get("name") || ""),
+    jobTitle: String(formData.get("jobTitle") || ""),
     origin: String(formData.get("origin") || existing.origin),
     shortDescription: String(formData.get("shortDescription") || ""),
     jtbdMain: String(formData.get("jtbdMain") || ""),

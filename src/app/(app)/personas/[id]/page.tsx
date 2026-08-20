@@ -91,7 +91,7 @@ export default async function PersonaDetailPage({ params }: { params: Promise<{ 
   return (
     <div className="max-w-3xl">
       <PageHeader
-        title={persona.name}
+        title={persona.jobTitle ? `${persona.name} — ${persona.jobTitle}` : persona.name}
         description={persona.shortDescription ?? undefined}
         actions={
           <>

@@ -177,6 +177,10 @@ export const personas = pgTable("personas", {
   // src/lib/delete-guards.ts) até desvincular.
   productId: uuid("product_id").references(() => products.id),
   name: varchar("name", { length: 255 }).notNull(),
+  // Cargo/função da persona (ex.: "Gerente de Marketing") — mostrado ao lado
+  // do nome em toda lista/seletor de persona, porque nomes fictícios sozinhos
+  // não dizem nada sobre quem é a persona na hora de escolher entre várias.
+  jobTitle: varchar("job_title", { length: 160 }),
   origin: personaOriginEnum("origin").notNull(),
   shortDescription: text("short_description"),
   jtbdMain: text("jtbd_main"),

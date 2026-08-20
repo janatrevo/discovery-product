@@ -22,6 +22,14 @@ export function PersonaFormFields({
           <Input name="name" required defaultValue={d?.name} />
         </Field>
         <Field>
+          <Label>Cargo</Label>
+          <Input
+            name="jobTitle"
+            placeholder="Ex.: Gerente de Marketing"
+            defaultValue={d?.jobTitle ?? ""}
+          />
+        </Field>
+        <Field>
           <Label>Origem</Label>
           <Select name="origin" defaultValue={d?.origin ?? "synthetic"} required>
             <option value="synthetic">Sintética — para exploração inicial</option>

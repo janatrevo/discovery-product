@@ -33,7 +33,8 @@ export default async function NewSimulationPage({
             <select name="personaIds" multiple required className="h-32 w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
               {personaOptions.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.name} {p.origin === "synthetic" ? "(sintética)" : "(research-based)"}
+                  {p.name}
+                  {p.jobTitle ? ` — ${p.jobTitle}` : ""} {p.origin === "synthetic" ? "(sintética)" : "(research-based)"}
                 </option>
               ))}
             </select>

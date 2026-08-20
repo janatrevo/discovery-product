@@ -70,7 +70,8 @@ export function HypothesisFormFields({
           >
             {personaOptions.map((p) => (
               <option key={p.id} value={p.id}>
-                {p.name} {p.origin === "synthetic" ? "(sintética)" : ""}
+                {p.name}
+                {p.jobTitle ? ` — ${p.jobTitle}` : ""} {p.origin === "synthetic" ? "(sintética)" : ""}
               </option>
             ))}
           </select>

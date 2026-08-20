@@ -44,7 +44,10 @@ export default async function PersonasPage() {
             <Link key={p.id} href={`/personas/${p.id}`}>
               <Card className="h-full transition-shadow hover:shadow-md">
                 <div className="mb-2 flex items-start justify-between gap-2">
-                  <p className="font-medium text-slate-900">{p.name}</p>
+                  <div>
+                    <p className="font-medium text-slate-900">{p.name}</p>
+                    {p.jobTitle && <p className="text-xs text-slate-500">{p.jobTitle}</p>}
+                  </div>
                   <Badge color={p.origin === "research_based" ? "emerald" : "amber"}>
                     {p.origin === "research_based" ? "Research-based" : "Sintética — não validada"}
                   </Badge>

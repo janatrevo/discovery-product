@@ -362,7 +362,10 @@ export default async function HypothesisWorkspacePage({
             <div className="flex flex-wrap gap-2">
               {linkedPersonas.map((p) => (
                 <Link key={p.persona.id} href={`/personas/${p.persona.id}`}>
-                  <Badge color={p.persona.origin === "research_based" ? "emerald" : "amber"}>{p.persona.name}</Badge>
+                  <Badge color={p.persona.origin === "research_based" ? "emerald" : "amber"}>
+                    {p.persona.name}
+                    {p.persona.jobTitle ? ` — ${p.persona.jobTitle}` : ""}
+                  </Badge>
                 </Link>
               ))}
               {linkedProducts.map((p) => (

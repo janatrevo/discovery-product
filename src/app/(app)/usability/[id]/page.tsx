@@ -51,7 +51,10 @@ export default async function UsabilityTestDetailPage({ params }: { params: Prom
             {findings.map(({ finding, persona }) => (
               <li key={finding.id} className="rounded-md border border-slate-100 p-2 text-sm">
                 <div className="mb-1 flex items-center justify-between gap-2">
-                  <Badge color="indigo">{persona?.name ?? "—"}</Badge>
+                  <Badge color="indigo">
+                    {persona?.name ?? "—"}
+                    {persona?.jobTitle ? ` — ${persona.jobTitle}` : ""}
+                  </Badge>
                   <div className="flex items-center gap-1">
                     <OriginBadge originClass={finding.originClass} />
                     {finding.humanConfirmed && <Badge color="emerald">confirmado por humano</Badge>}

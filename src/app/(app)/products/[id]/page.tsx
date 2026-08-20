@@ -89,7 +89,10 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                     className="flex items-center justify-between gap-2 rounded-md border border-amber-200 bg-white px-3 py-2"
                   >
                     <Link href={`/personas/${p.id}`} className="min-w-0 flex-1">
-                      <p className="truncate text-sm text-slate-800">{p.name}</p>
+                      <p className="truncate text-sm text-slate-800">
+                        {p.name}
+                        {p.jobTitle ? ` — ${p.jobTitle}` : ""}
+                      </p>
                     </Link>
                     <form action={unlinkProductFromPersona.bind(null, p.id, id)}>
                       <Button type="submit" variant="ghost" size="sm">
