@@ -3,6 +3,26 @@ import { db } from "@/db";
 import { surveys, surveyQuestions } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { submitSurveyResponse } from "@/app/(app)/research/surveys/actions";
+import { closeSurveyIfWindowExpired, evaluateSurveyAvailability } from "@/lib/survey-window";
+
+const UNAVAILABLE_MESSAGE: Record<string, { title: string; description: string }> = {
+  not_published: {
+    title: "Pesquisa não disponível",
+    description: "Este link ainda não está aberto para respostas.",
+  },
+  not_started: {
+    title: "Pesquisa ainda não começou",
+    description: "Este link vai abrir para respostas em breve. Tente novamente mais perto da data de início.",
+  },
+  ended: {
+    title: "Pesquisa encerrada",
+    description: "O prazo de coleta desta pesquisa já terminou e ela não está mais recebendo respostas.",
+  },
+  manually_closed: {
+    title: "Pesquisa encerrada",
+    description: "Esta pesquisa não está mais disponível e não está recebendo respostas.",
+  },
+};
 
 function QuestionInput({ q }: { q: typeof surveyQuestions.$inferSelect }) {
   const name = `q_${q.id}`;
@@ -31,6 +51,44 @@ function QuestionInput({ q }: { q: typeof surveyQuestions.$inferSelect }) {
     );
   }
   const options = (q.options as string[]) ?? [];
+  if (q.questionType === "matrix") {
+    const rows = (q.matrixRows as string[]) ?? [];
+    if (rows.length === 0 || options.length === 0) {
+      return (
+        <p className="text-xs text-amber-600">
+          Esta pergunta de matriz ainda não tem linhas e/ou colunas configuradas.
+        </p>
+      );
+    }
+    return (
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-max text-sm">
+          <thead>
+            <tr>
+              <th className="pb-2 pr-4 text-left text-xs font-medium text-slate-500">Atividade</th>
+              {options.map((c) => (
+                <th key={c} className="px-2 pb-2 text-center text-xs font-medium text-slate-500">
+                  {c}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, ri) => (
+              <tr key={ri} className="border-t border-slate-100">
+                <td className="py-2 pr-4 text-slate-700">{r}</td>
+                {options.map((c) => (
+                  <td key={c} className="px-2 py-2 text-center">
+                    <input type="checkbox" name={`${name}__row_${ri}`} value={c} />
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
   if (q.questionType === "multi_choice") {
     return (
       <div className="space-y-1">
@@ -58,8 +116,24 @@ function QuestionInput({ q }: { q: typeof surveyQuestions.$inferSelect }) {
 
 export default async function PublicSurveyPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const [survey] = await db.select().from(surveys).where(eq(surveys.publicSlug, slug)).limit(1);
-  if (!survey || survey.status !== "published") notFound();
+  const [surveyRow] = await db.select().from(surveys).where(eq(surveys.publicSlug, slug)).limit(1);
+  if (!surveyRow) notFound();
+
+  // Se o prazo de término já passou, finaliza de fato agora (ver
+  // src/lib/survey-window.ts) — assim o status gravado não fica "published"
+  // pra sempre só porque ninguém abriu a tela interna depois do prazo.
+  const survey = await closeSurveyIfWindowExpired(surveyRow);
+  const availability = evaluateSurveyAvailability(survey);
+
+  if (!availability.open) {
+    const msg = UNAVAILABLE_MESSAGE[availability.reason] ?? UNAVAILABLE_MESSAGE.not_published;
+    return (
+      <div className="mx-auto max-w-xl px-4 py-20 text-center">
+        <h1 className="text-xl font-semibold text-slate-900">{msg.title}</h1>
+        <p className="mt-2 text-sm text-slate-500">{msg.description}</p>
+      </div>
+    );
+  }
 
   const questions = await db
     .select()

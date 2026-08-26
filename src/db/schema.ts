@@ -97,6 +97,13 @@ export const questionTypeEnum = pgEnum("question_type", [
 
 export const surveyStatusEnum = pgEnum("survey_status", ["draft", "published", "closed"]);
 
+// Roteiro de entrevista não tem link público nem coleta pra "encerrar" (só
+// survey tem isso) — mas passa a travar edição depois de "published", pelo
+// mesmo motivo: uma vez que entrevistas reais foram conduzidas com um
+// roteiro, mudar as perguntas retroativamente tornaria as entrevistas já
+// feitas inconsistentes com a versão atual do roteiro.
+export const guideStatusEnum = pgEnum("guide_status", ["draft", "published"]);
+
 export const severityEnum = pgEnum("severity", ["low", "medium", "high", "critical"]);
 
 export const simulationModeEnum = pgEnum("simulation_mode", ["scenario", "image"]);
@@ -432,6 +439,14 @@ export const surveys = pgTable("surveys", {
   sampleTarget: integer("sample_target").default(30),
   status: surveyStatusEnum("status").notNull().default("draft"),
   publicSlug: varchar("public_slug", { length: 60 }).unique(),
+  // Janela de coleta do link público (ver src/app/s/[slug]/page.tsx e
+  // src/lib/survey-window.ts) — ambas opcionais. Sem start_date, aceita
+  // resposta assim que published; sem end_date, só encerra manualmente
+  // (closeSurvey). Quando end_date passa, closeSurveyIfWindowExpired vira o
+  // status pra "closed" de fato na primeira vez que alguém abre o survey
+  // (link público ou tela interna) depois do prazo.
+  startDate: timestamp("start_date", { withTimezone: true }),
+  endDate: timestamp("end_date", { withTimezone: true }),
   createdBy: uuid("created_by").references(() => users.id),
   createdAt: createdAt(),
 });
@@ -444,7 +459,12 @@ export const surveyQuestions = pgTable("survey_questions", {
   orderIndex: integer("order_index").notNull().default(0),
   questionText: text("question_text").notNull(),
   questionType: questionTypeEnum("question_type").notNull(),
+  // Pra single/multi_choice, demographic, frequency: lista de opções. Pra
+  // matrix: lista de COLUNAS (ex.: os sistemas/ferramentas) — as LINHAS da
+  // matriz (ex.: as atividades) ficam em matrix_rows, abaixo. Ver
+  // QuestionInput em src/app/s/[slug]/page.tsx pra como isso vira grade.
   options: jsonb("options").$type<string[]>().default(sql`'[]'::jsonb`),
+  matrixRows: jsonb("matrix_rows").$type<string[]>().default(sql`'[]'::jsonb`),
   leadingFlag: boolean("leading_flag").default(false).notNull(),
   leadingFlagNote: text("leading_flag_note"),
 });
@@ -477,6 +497,7 @@ export const interviewGuides = pgTable("interview_guides", {
     .references(() => projects.id, { onDelete: "cascade" })
     .notNull(),
   hypothesisId: uuid("hypothesis_id").references(() => hypotheses.id),
+  status: guideStatusEnum("status").notNull().default("draft"),
   title: varchar("title", { length: 255 }).notNull(),
   objective: text("objective"),
   scenario: text("scenario"),

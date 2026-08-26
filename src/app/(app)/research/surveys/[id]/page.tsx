@@ -1,11 +1,28 @@
 import { notFound } from "next/navigation";
+import { headers } from "next/headers";
 import { db } from "@/db";
 import { surveys, surveyQuestions, surveyResponses, hypotheses, evidence } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { getPageContext } from "@/lib/page-context";
 import { computeSurveyResults } from "@/lib/survey-results";
+import { closeSurveyIfWindowExpired, evaluateSurveyAvailability } from "@/lib/survey-window";
 import { Badge, Button, Card, Field, Input, Label, PageHeader, Select, Textarea } from "@/components/ui/primitives";
-import { addQuestion, deleteQuestion, publishSurvey, closeSurvey, promoteSurveyToEvidence } from "../actions";
+import {
+  addQuestion,
+  updateQuestion,
+  deleteQuestion,
+  publishSurvey,
+  closeSurvey,
+  promoteSurveyToEvidence,
+  updateSurveySchedule,
+  updateSurvey,
+} from "../actions";
+
+function toDateInputValue(d: Date | string | null | undefined) {
+  if (!d) return "";
+  const date = typeof d === "string" ? new Date(d) : d;
+  return date.toISOString().slice(0, 10);
+}
 
 const QUESTION_TYPES = [
   { value: "likert", label: "Likert (1-5)" },
@@ -23,8 +40,13 @@ const QUESTION_TYPES = [
 export default async function SurveyBuilderPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { project, role } = await getPageContext();
-  const [survey] = await db.select().from(surveys).where(eq(surveys.id, id)).limit(1);
-  if (!survey || survey.projectId !== project.id) notFound();
+  const [surveyRow] = await db.select().from(surveys).where(eq(surveys.id, id)).limit(1);
+  if (!surveyRow || surveyRow.projectId !== project.id) notFound();
+
+  // Finaliza de fato se o prazo já passou (ver src/lib/survey-window.ts) —
+  // assim o badge de status aqui nunca mostra "published" com a coleta na
+  // prática já encerrada pelo prazo.
+  const survey = await closeSurveyIfWindowExpired(surveyRow);
 
   const questions = await db
     .select()
@@ -38,7 +60,11 @@ export default async function SurveyBuilderPage({ params }: { params: Promise<{ 
     .where(eq(surveyResponses.surveyId, id));
 
   const canEdit = role !== "viewer";
-  const publicUrl = survey.publicSlug ? `/s/${survey.publicSlug}` : null;
+  const h = await headers();
+  const host = h.get("host") || "localhost:3000";
+  const proto = host.startsWith("localhost") || host.startsWith("127.0.0.1") ? "http" : "https";
+  const publicUrl = survey.publicSlug ? `${proto}://${host}/s/${survey.publicSlug}` : null;
+  const availability = evaluateSurveyAvailability(survey);
   const results = survey.status !== "draft" ? await computeSurveyResults(id) : [];
 
   const [hypothesisList, promotedEvidenceRows] = await Promise.all([
@@ -73,15 +99,90 @@ export default async function SurveyBuilderPage({ params }: { params: Promise<{ 
         }
       />
 
+      {canEdit && survey.status === "draft" && (
+        <Card>
+          <p className="mb-3 text-sm font-semibold text-slate-700">Editar pesquisa</p>
+          <form action={updateSurvey.bind(null, id)}>
+            <Field>
+              <Label>Título</Label>
+              <Input name="title" required defaultValue={survey.title} />
+            </Field>
+            <Field>
+              <Label>Objetivo</Label>
+              <Textarea name="objective" rows={2} defaultValue={survey.objective ?? ""} />
+            </Field>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Field>
+                <Label>Público-alvo</Label>
+                <Input name="targetAudience" defaultValue={survey.targetAudience ?? ""} />
+              </Field>
+              <Field>
+                <Label>Meta de amostra</Label>
+                <Input name="sampleTarget" type="number" defaultValue={survey.sampleTarget ?? 30} />
+              </Field>
+            </div>
+            <Button type="submit" variant="secondary">
+              Salvar alterações
+            </Button>
+          </form>
+          <p className="mt-2 text-xs text-slate-500">
+            Só é possível editar título, objetivo e público-alvo enquanto a pesquisa estiver em rascunho —
+            depois de publicar, essas informações ficam travadas.
+          </p>
+        </Card>
+      )}
+
       {publicUrl && (
         <Card className="bg-indigo-50">
           <p className="text-sm text-slate-700">
-            Link público para coleta:{" "}
+            Link público para coleta — envie este link para os laboratórios/respondentes:
+          </p>
+          <p className="mt-1 break-all">
             <code className="rounded bg-white px-1.5 py-0.5 text-xs">{publicUrl}</code>
           </p>
-          <p className="mt-1 text-xs text-slate-500">{responseCount} resposta(s) até agora · meta: {survey.sampleTarget}</p>
+          <p className="mt-2 text-xs text-slate-500">
+            {responseCount} resposta(s) até agora · meta: {survey.sampleTarget}
+          </p>
+          {!availability.open && (
+            <p className="mt-2 text-xs font-medium text-amber-700">
+              {availability.reason === "not_started" && "Ainda não está aceitando respostas — aguardando a data de início."}
+              {availability.reason === "ended" && "Prazo de coleta encerrado — o link não aceita mais respostas."}
+              {availability.reason === "manually_closed" && "Coleta encerrada manualmente — o link não aceita mais respostas."}
+              {availability.reason === "not_published" && "Ainda não publicada — o link só funciona depois de publicar."}
+            </p>
+          )}
         </Card>
       )}
+
+      <Card>
+        <p className="mb-2 text-sm font-semibold text-slate-700">Janela de coleta</p>
+        <p className="mb-3 text-xs text-slate-500">
+          Opcional. Defina quando o link público deve começar e/ou parar de aceitar respostas — passada a
+          data de término, o formulário público exibe automaticamente uma mensagem de pesquisa encerrada e
+          para de coletar. Você também pode encerrar a qualquer momento pelo botão &quot;Encerrar coleta&quot;
+          acima, mesmo sem definir uma data de término.
+        </p>
+        {canEdit ? (
+          <form action={updateSurveySchedule.bind(null, id)} className="flex flex-wrap items-end gap-3">
+            <div>
+              <Label>Data de início</Label>
+              <Input type="date" name="startDate" defaultValue={toDateInputValue(survey.startDate)} />
+            </div>
+            <div>
+              <Label>Data de término</Label>
+              <Input type="date" name="endDate" defaultValue={toDateInputValue(survey.endDate)} />
+            </div>
+            <Button type="submit" variant="secondary">
+              Salvar janela
+            </Button>
+          </form>
+        ) : (
+          <p className="text-sm text-slate-600">
+            {survey.startDate ? new Date(survey.startDate).toLocaleDateString("pt-BR") : "sem início definido"} —{" "}
+            {survey.endDate ? new Date(survey.endDate).toLocaleDateString("pt-BR") : "sem término definido"}
+          </p>
+        )}
+      </Card>
 
       <Card>
         <p className="mb-3 text-sm font-semibold text-slate-700">Perguntas ({questions.length})</p>
@@ -109,6 +210,49 @@ export default async function SurveyBuilderPage({ params }: { params: Promise<{ 
                   ⚠ Possível leading question: {q.leadingFlagNote}
                 </p>
               )}
+              {canEdit && survey.status === "draft" && (
+                <details className="mt-2">
+                  <summary className="cursor-pointer text-xs text-indigo-600 hover:underline">editar pergunta</summary>
+                  <form
+                    action={updateQuestion.bind(null, id, q.id)}
+                    className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2"
+                  >
+                    <div className="sm:col-span-2">
+                      <Field>
+                        <Label>Texto da pergunta</Label>
+                        <Input name="questionText" required defaultValue={q.questionText} />
+                      </Field>
+                    </div>
+                    <Field>
+                      <Label>Tipo</Label>
+                      <Select name="questionType" defaultValue={q.questionType}>
+                        {QUESTION_TYPES.map((t) => (
+                          <option key={t.value} value={t.value}>
+                            {t.label}
+                          </option>
+                        ))}
+                      </Select>
+                    </Field>
+                    <Field>
+                      <Label>Opções (uma por linha, se aplicável)</Label>
+                      <Textarea name="options" rows={2} defaultValue={((q.options as string[]) ?? []).join("\n")} />
+                    </Field>
+                    <Field>
+                      <Label>Linhas da matriz (uma por linha — só para o tipo Matriz)</Label>
+                      <Textarea
+                        name="matrixRows"
+                        rows={2}
+                        defaultValue={((q.matrixRows as string[]) ?? []).join("\n")}
+                      />
+                    </Field>
+                    <div className="sm:col-span-2">
+                      <Button type="submit" size="sm" variant="secondary">
+                        Salvar pergunta
+                      </Button>
+                    </div>
+                  </form>
+                </details>
+              )}
             </li>
           ))}
         </ul>
@@ -135,6 +279,15 @@ export default async function SurveyBuilderPage({ params }: { params: Promise<{ 
               <Label>Opções (uma por linha, se aplicável)</Label>
               <Textarea name="options" rows={2} />
             </Field>
+            <Field>
+              <Label>Linhas da matriz (uma por linha — só para o tipo Matriz)</Label>
+              <Textarea name="matrixRows" rows={2} placeholder={"Ex.: Cadastro de exames\nGestão de preços"} />
+            </Field>
+            <p className="sm:col-span-2 -mt-2 text-xs text-slate-500">
+              Só usado no tipo Matriz: &quot;Opções&quot; vira as colunas (ex.: os sistemas) e &quot;Linhas da
+              matriz&quot; vira as linhas (ex.: as atividades) — o formulário público mostra uma grade com
+              uma caixa de marcar em cada cruzamento.
+            </p>
             <div className="sm:col-span-2">
               <Button type="submit" variant="secondary">
                 + Adicionar pergunta
@@ -175,6 +328,34 @@ export default async function SurveyBuilderPage({ params }: { params: Promise<{ 
                     <p className="mt-1 text-lg font-semibold text-slate-800">
                       {r.average != null ? r.average.toFixed(1) : "—"}
                     </p>
+                  )}
+                  {r.type === "matrix" && (
+                    <div className="mt-1 overflow-x-auto">
+                      <table className="w-full min-w-max text-xs">
+                        <thead>
+                          <tr>
+                            <th className="pb-1 pr-3 text-left font-medium text-slate-500">Atividade</th>
+                            {r.cols.map((c) => (
+                              <th key={c} className="px-2 pb-1 text-center font-medium text-slate-500">
+                                {c}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {r.rows.map((row) => (
+                            <tr key={row} className="border-t border-slate-100">
+                              <td className="py-1 pr-3 text-slate-700">{row}</td>
+                              {r.cols.map((c) => (
+                                <td key={c} className="px-2 py-1 text-center text-slate-600">
+                                  {r.counts[row]?.[c] ?? 0}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   )}
                   {r.type === "text" && (
                     <ul className="mt-1 list-inside list-disc text-sm text-slate-600">

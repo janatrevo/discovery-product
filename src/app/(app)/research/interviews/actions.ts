@@ -10,7 +10,7 @@ import {
   evidence,
   hypothesisEvidence,
 } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { getPageContext } from "@/lib/page-context";
 import { linesToArray } from "@/lib/list-utils";
 import { suggestCodes } from "@/lib/ai";
@@ -72,6 +72,92 @@ export async function createGuide(formData: FormData) {
 
   revalidatePath("/research/interviews");
   redirect(`/research/interviews/${guide.id}`);
+}
+
+async function assertGuideIsDraft(guideId: string) {
+  const [guide] = await db.select().from(interviewGuides).where(eq(interviewGuides.id, guideId)).limit(1);
+  if (!guide) throw new Error("Roteiro não encontrado.");
+  if (guide.status !== "draft") {
+    throw new Error("Só é possível editar o roteiro (ou suas perguntas) enquanto ele estiver em rascunho.");
+  }
+}
+
+// Trava o roteiro — a partir daqui, o título/objetivo/cenário/JTBD e a
+// lista de perguntas não podem mais ser editados (ver assertGuideIsDraft).
+// Não existe "reabrir para edição" de propósito: uma vez publicado, se
+// entrevistas reais já foram (ou vierem a ser) conduzidas com ele, mudar as
+// perguntas depois criaria inconsistência entre entrevistas antigas e novas.
+export async function publishGuide(guideId: string) {
+  const { role } = await getPageContext();
+  if (role === "viewer") throw new Error("Sem permissão.");
+  await db.update(interviewGuides).set({ status: "published" }).where(eq(interviewGuides.id, guideId));
+  revalidatePath(`/research/interviews/${guideId}`);
+}
+
+export async function updateGuide(guideId: string, formData: FormData) {
+  const { role } = await getPageContext();
+  if (role === "viewer") throw new Error("Sem permissão.");
+  await assertGuideIsDraft(guideId);
+
+  await db
+    .update(interviewGuides)
+    .set({
+      title: String(formData.get("title") || ""),
+      objective: String(formData.get("objective") || ""),
+      scenario: String(formData.get("scenario") || ""),
+      jtbdContext: String(formData.get("jtbdContext") || ""),
+      jtbdMotivation: String(formData.get("jtbdMotivation") || ""),
+      jtbdObstacle: String(formData.get("jtbdObstacle") || ""),
+      jtbdExpectedOutcome: String(formData.get("jtbdExpectedOutcome") || ""),
+    })
+    .where(eq(interviewGuides.id, guideId));
+
+  revalidatePath(`/research/interviews/${guideId}`);
+}
+
+export async function addGuideQuestion(guideId: string, formData: FormData) {
+  const { role } = await getPageContext();
+  if (role === "viewer") throw new Error("Sem permissão.");
+  await assertGuideIsDraft(guideId);
+
+  const questionText = String(formData.get("questionText") || "").trim();
+  if (!questionText) return;
+
+  const [{ count }] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(interviewGuideQuestions)
+    .where(eq(interviewGuideQuestions.guideId, guideId));
+
+  await db.insert(interviewGuideQuestions).values({
+    guideId,
+    orderIndex: count ?? 0,
+    questionText,
+    isFollowup: formData.get("isFollowup") === "true",
+  });
+  revalidatePath(`/research/interviews/${guideId}`);
+}
+
+export async function updateGuideQuestion(guideId: string, questionId: string, formData: FormData) {
+  const { role } = await getPageContext();
+  if (role === "viewer") throw new Error("Sem permissão.");
+  await assertGuideIsDraft(guideId);
+
+  await db
+    .update(interviewGuideQuestions)
+    .set({
+      questionText: String(formData.get("questionText") || ""),
+      isFollowup: formData.get("isFollowup") === "true",
+    })
+    .where(eq(interviewGuideQuestions.id, questionId));
+  revalidatePath(`/research/interviews/${guideId}`);
+}
+
+export async function deleteGuideQuestion(guideId: string, questionId: string) {
+  const { role } = await getPageContext();
+  if (role === "viewer") throw new Error("Sem permissão.");
+  await assertGuideIsDraft(guideId);
+  await db.delete(interviewGuideQuestions).where(eq(interviewGuideQuestions.id, questionId));
+  revalidatePath(`/research/interviews/${guideId}`);
 }
 
 export async function logInterview(guideId: string, formData: FormData) {

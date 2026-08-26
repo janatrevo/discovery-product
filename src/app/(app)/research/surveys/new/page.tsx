@@ -29,6 +29,20 @@ export default async function NewSurveyPage({
             <Label>Meta de amostra</Label>
             <Input name="sampleTarget" type="number" defaultValue={30} />
           </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field>
+              <Label>Data de início (opcional)</Label>
+              <Input name="startDate" type="date" />
+            </Field>
+            <Field>
+              <Label>Data de término (opcional)</Label>
+              <Input name="endDate" type="date" />
+            </Field>
+          </div>
+          <p className="mb-3 text-xs text-slate-500">
+            Pode deixar em branco e definir depois — dá pra editar essa janela na tela do survey em
+            qualquer momento, mesmo após publicar.
+          </p>
           <Button type="submit">Criar e montar questionário</Button>
         </form>
       </Card>

@@ -8,6 +8,7 @@ import { checkLeadingQuestion } from "@/lib/bias-check";
 import { linesToArray } from "@/lib/list-utils";
 import { computeSurveyResults, summarizeSurveyResults } from "@/lib/survey-results";
 import { recomputeHypothesis } from "@/lib/recompute-hypothesis";
+import { evaluateSurveyAvailability, closeSurveyIfWindowExpired } from "@/lib/survey-window";
 import { nanoid } from "nanoid";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
@@ -29,6 +30,14 @@ export async function createSurvey(formData: FormData) {
   if (role === "viewer") throw new Error("Sem permissão.");
   const hypothesisId = String(formData.get("hypothesisId") || "") || null;
 
+  const startRaw = String(formData.get("startDate") || "");
+  const endRaw = String(formData.get("endDate") || "");
+  const startDate = startRaw ? new Date(`${startRaw}T00:00:00`) : null;
+  const endDate = endRaw ? new Date(`${endRaw}T23:59:59`) : null;
+  if (startDate && endDate && endDate < startDate) {
+    throw new Error("A data de término não pode ser antes da data de início.");
+  }
+
   const [created] = await db
     .insert(surveys)
     .values({
@@ -38,6 +47,8 @@ export async function createSurvey(formData: FormData) {
       objective: String(formData.get("objective") || ""),
       targetAudience: String(formData.get("targetAudience") || ""),
       sampleTarget: Number(formData.get("sampleTarget") || 30),
+      startDate,
+      endDate,
       createdBy: user.id,
     })
     .returning();
@@ -46,9 +57,61 @@ export async function createSurvey(formData: FormData) {
   redirect(`/research/surveys/${created.id}`);
 }
 
+// Editável em qualquer momento (rascunho, publicado ou já encerrado) — a
+// pesquisadora pode querer estender ou adiantar o prazo de coleta mesmo
+// depois de publicar. Datas em branco removem o limite correspondente
+// (ex.: apagar a data de término faz a pesquisa voltar a só encerrar
+// manualmente, via closeSurvey).
+export async function updateSurveySchedule(surveyId: string, formData: FormData) {
+  const { role } = await getPageContext();
+  if (role === "viewer") throw new Error("Sem permissão.");
+
+  const startRaw = String(formData.get("startDate") || "");
+  const endRaw = String(formData.get("endDate") || "");
+  const startDate = startRaw ? new Date(`${startRaw}T00:00:00`) : null;
+  const endDate = endRaw ? new Date(`${endRaw}T23:59:59`) : null;
+  if (startDate && endDate && endDate < startDate) {
+    throw new Error("A data de término não pode ser antes da data de início.");
+  }
+
+  await db.update(surveys).set({ startDate, endDate }).where(eq(surveys.id, surveyId));
+  revalidatePath(`/research/surveys/${surveyId}`);
+}
+
+async function assertSurveyIsDraft(surveyId: string) {
+  const [survey] = await db.select().from(surveys).where(eq(surveys.id, surveyId)).limit(1);
+  if (!survey) throw new Error("Survey não encontrado.");
+  if (survey.status !== "draft") {
+    throw new Error("Só é possível editar a pesquisa (ou suas perguntas) enquanto ela estiver em rascunho.");
+  }
+}
+
+// Título/objetivo/público-alvo/meta de amostra — só editável em rascunho.
+// Depois de publicar, o link já pode estar circulando com respostas
+// chegando, então mudar o objetivo ou a meta silenciosamente deixaria de
+// bater com o que os respondentes de fato viram.
+export async function updateSurvey(surveyId: string, formData: FormData) {
+  const { role } = await getPageContext();
+  if (role === "viewer") throw new Error("Sem permissão.");
+  await assertSurveyIsDraft(surveyId);
+
+  await db
+    .update(surveys)
+    .set({
+      title: String(formData.get("title") || ""),
+      objective: String(formData.get("objective") || ""),
+      targetAudience: String(formData.get("targetAudience") || ""),
+      sampleTarget: Number(formData.get("sampleTarget") || 30),
+    })
+    .where(eq(surveys.id, surveyId));
+
+  revalidatePath(`/research/surveys/${surveyId}`);
+}
+
 export async function addQuestion(surveyId: string, formData: FormData) {
   const { role } = await getPageContext();
   if (role === "viewer") throw new Error("Sem permissão.");
+  await assertSurveyIsDraft(surveyId);
   const questionText = String(formData.get("questionText") || "");
   const { leading, note } = checkLeadingQuestion(questionText);
 
@@ -63,15 +126,40 @@ export async function addQuestion(surveyId: string, formData: FormData) {
     questionText,
     questionType: String(formData.get("questionType") || "open_text") as never,
     options: linesToArray(formData.get("options")),
+    matrixRows: linesToArray(formData.get("matrixRows")),
     leadingFlag: leading,
     leadingFlagNote: note,
   });
   revalidatePath(`/research/surveys/${surveyId}`);
 }
 
+export async function updateQuestion(surveyId: string, questionId: string, formData: FormData) {
+  const { role } = await getPageContext();
+  if (role === "viewer") throw new Error("Sem permissão.");
+  await assertSurveyIsDraft(surveyId);
+
+  const questionText = String(formData.get("questionText") || "");
+  const { leading, note } = checkLeadingQuestion(questionText);
+
+  await db
+    .update(surveyQuestions)
+    .set({
+      questionText,
+      questionType: String(formData.get("questionType") || "open_text") as never,
+      options: linesToArray(formData.get("options")),
+      matrixRows: linesToArray(formData.get("matrixRows")),
+      leadingFlag: leading,
+      leadingFlagNote: note,
+    })
+    .where(eq(surveyQuestions.id, questionId));
+
+  revalidatePath(`/research/surveys/${surveyId}`);
+}
+
 export async function deleteQuestion(surveyId: string, questionId: string) {
   const { role } = await getPageContext();
   if (role === "viewer") throw new Error("Sem permissão.");
+  await assertSurveyIsDraft(surveyId);
   await db.delete(surveyQuestions).where(eq(surveyQuestions.id, questionId));
   revalidatePath(`/research/surveys/${surveyId}`);
 }
@@ -165,8 +253,19 @@ export async function promoteSurveyToEvidence(surveyId: string, formData: FormDa
 
 // ---------- Resposta pública (sem autenticação) ----------
 export async function submitSurveyResponse(slug: string, formData: FormData) {
-  const [survey] = await db.select().from(surveys).where(eq(surveys.publicSlug, slug)).limit(1);
-  if (!survey || survey.status !== "published") throw new Error("Pesquisa não disponível.");
+  const [surveyRow] = await db.select().from(surveys).where(eq(surveys.publicSlug, slug)).limit(1);
+  if (!surveyRow) throw new Error("Pesquisa não disponível.");
+
+  // Reavalia a janela de coleta no momento do envio, não só quando a página
+  // carregou — evita que alguém envie respostas depois do prazo com uma aba
+  // aberta desde antes de a pesquisa encerrar. Se não estiver mais aberta,
+  // manda de volta pro link público em vez de estourar um erro cru: a
+  // própria página /s/[slug] já sabe mostrar a mensagem certa de
+  // indisponível pro motivo atual.
+  const survey = await closeSurveyIfWindowExpired(surveyRow);
+  if (!evaluateSurveyAvailability(survey).open) {
+    redirect(`/s/${slug}`);
+  }
 
   const questions = await db.select().from(surveyQuestions).where(eq(surveyQuestions.surveyId, survey.id));
 
@@ -174,6 +273,21 @@ export async function submitSurveyResponse(slug: string, formData: FormData) {
 
   const answerRows = questions
     .map((q) => {
+      // Matriz: uma célula por linha×coluna (ver QuestionInput em
+      // src/app/s/[slug]/page.tsx) — os inputs vêm nomeados
+      // "q_{id}__row_{índice da linha}", cada um podendo ter várias colunas
+      // marcadas (checkbox). Guarda como { "linha": ["coluna", ...] }.
+      if (q.questionType === "matrix") {
+        const rows = (q.matrixRows as string[]) ?? [];
+        const value: Record<string, string[]> = {};
+        rows.forEach((r, ri) => {
+          value[r] = formData.getAll(`q_${q.id}__row_${ri}`).map(String);
+        });
+        const answered = Object.values(value).some((v) => v.length > 0);
+        if (!answered) return null;
+        return { responseId: response.id, questionId: q.id, answerValue: value };
+      }
+
       const raw = formData.getAll(`q_${q.id}`);
       if (raw.length === 0) return null;
       const value = q.questionType === "multi_choice" ? raw.map(String) : String(raw[0]);
