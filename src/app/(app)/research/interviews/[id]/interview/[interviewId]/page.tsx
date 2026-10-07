@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { db } from "@/db";
-import { interviews, codes, codedSegments, interviewGuides, hypotheses, evidence } from "@/db/schema";
+import { interviews, codes, codedSegments, interviewGuides, hypotheses, evidence, personas } from "@/db/schema";
+import { interviewLabel } from "@/lib/interview-label";
 import { eq, desc } from "drizzle-orm";
 import { getPageContext } from "@/lib/page-context";
 import { Badge, Button, Card, Field, Input, Label, PageHeader, Select } from "@/components/ui/primitives";
@@ -36,6 +37,9 @@ export default async function InterviewDetailPage({
     db.select().from(evidence).where(eq(evidence.sourceInterviewId, interviewId)).limit(1),
   ]);
   const guide = guideRows[0];
+  const [persona] = interview.personaId
+    ? await db.select().from(personas).where(eq(personas.id, interview.personaId)).limit(1)
+    : [];
   const promotedEvidence = promotedEvidenceRows[0];
   const confirmedCount = segments.filter((s) => s.seg.confirmed).length;
 
@@ -44,7 +48,31 @@ export default async function InterviewDetailPage({
   return (
     <div className="max-w-4xl grid grid-cols-1 gap-4 lg:grid-cols-2">
       <Card className="lg:col-span-2">
-        <PageHeader title={`Entrevista — ${interview.intervieweeRef || "sem identificação"}`} />
+        <PageHeader title={`Entrevista — ${interviewLabel(interview) || "sem identificação"}`} />
+        <dl className="mb-4 grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+          <div>
+            <dt className="text-xs text-slate-500">Entrevistado</dt>
+            <dd className="text-slate-800">{interview.intervieweeName || "—"}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-slate-500">Laboratório</dt>
+            <dd className="text-slate-800">{interview.intervieweeLab || "—"}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-slate-500">Cargo</dt>
+            <dd className="text-slate-800">{interview.intervieweeRole || "—"}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-slate-500">Persona relacionada</dt>
+            <dd className="text-slate-800">{persona ? persona.name : "—"}</dd>
+          </div>
+          {interview.intervieweeRef && (
+            <div>
+              <dt className="text-xs text-slate-500">Código interno</dt>
+              <dd className="text-slate-800">{interview.intervieweeRef}</dd>
+            </div>
+          )}
+        </dl>
         <p className="whitespace-pre-wrap text-sm text-slate-700">{interview.transcript}</p>
       </Card>
 

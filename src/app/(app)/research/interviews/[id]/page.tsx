@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { interviewGuides, interviewGuideQuestions, interviews, personas } from "@/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { getPageContext } from "@/lib/page-context";
+import { interviewLabel } from "@/lib/interview-label";
 import {
   Badge,
   Button,
@@ -181,7 +182,7 @@ export default async function GuideDetailPage({ params }: { params: Promise<{ id
             {interviewList.map((iv) => (
               <li key={iv.id}>
                 <Link href={`/research/interviews/${id}/interview/${iv.id}`} className="text-sm hover:underline">
-                  {iv.intervieweeRef || "Entrevistado"} — {new Date(iv.interviewDate).toLocaleDateString("pt-BR")}
+                  {interviewLabel(iv) || "Entrevistado"} — {new Date(iv.interviewDate).toLocaleDateString("pt-BR")}
                 </Link>
               </li>
             ))}
@@ -195,8 +196,20 @@ export default async function GuideDetailPage({ params }: { params: Promise<{ id
           <form action={logInterview.bind(null, id)}>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Field>
-                <Label>Identificação do entrevistado</Label>
-                <Input name="intervieweeRef" placeholder="Ex.: P07 - gerente de marketing" />
+                <Label>Nome do entrevistado</Label>
+                <Input name="intervieweeName" required placeholder="Ex.: Maria Silva" />
+              </Field>
+              <Field>
+                <Label>Nome do laboratório</Label>
+                <Input name="intervieweeLab" required placeholder="Ex.: Laboratório Central" />
+              </Field>
+              <Field>
+                <Label>Cargo do entrevistado</Label>
+                <Input name="intervieweeRole" required placeholder="Ex.: Recepcionista / Atendente" />
+              </Field>
+              <Field>
+                <Label>Código interno (opcional)</Label>
+                <Input name="intervieweeRef" placeholder="Ex.: P07" />
               </Field>
               <Field>
                 <Label>Persona</Label>

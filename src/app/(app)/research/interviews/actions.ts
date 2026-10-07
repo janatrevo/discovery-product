@@ -13,6 +13,7 @@ import {
 import { eq, and, sql } from "drizzle-orm";
 import { getPageContext } from "@/lib/page-context";
 import { linesToArray } from "@/lib/list-utils";
+import { interviewLabel } from "@/lib/interview-label";
 import { suggestCodes } from "@/lib/ai";
 import { recomputeHypothesis } from "@/lib/recompute-hypothesis";
 import { redirect } from "next/navigation";
@@ -170,7 +171,10 @@ export async function logInterview(guideId: string, formData: FormData) {
       projectId: project.id,
       guideId,
       personaId: String(formData.get("personaId") || "") || null,
-      intervieweeRef: String(formData.get("intervieweeRef") || ""),
+      intervieweeRef: String(formData.get("intervieweeRef") || "").trim() || null,
+      intervieweeName: String(formData.get("intervieweeName") || "").trim() || null,
+      intervieweeLab: String(formData.get("intervieweeLab") || "").trim() || null,
+      intervieweeRole: String(formData.get("intervieweeRole") || "").trim() || null,
       transcript: String(formData.get("transcript") || ""),
       createdBy: user.id,
     })
@@ -255,12 +259,13 @@ export async function promoteInterviewToEvidence(interviewId: string, formData: 
 
   const favorable = formData.get("favorable") === "true";
 
-  const content = `Trechos codificados de "${interview.intervieweeRef || "entrevista"}":\n${confirmedSegments
+  const label = interviewLabel(interview);
+  const content = `Trechos codificados de "${label || "entrevista"}":\n${confirmedSegments
     .map((s) => `[${s.code.name}] "${s.seg.excerpt}"`)
     .join("\n")}`;
 
   const values = {
-    source: `Entrevista: ${interview.intervieweeRef || interviewId.slice(0, 8)}`,
+    source: `Entrevista: ${label || interviewId.slice(0, 8)}`,
     type: "interview",
     content,
     personaId: interview.personaId,

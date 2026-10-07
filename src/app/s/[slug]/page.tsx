@@ -111,6 +111,9 @@ function QuestionInput({ q }: { q: typeof surveyQuestions.$inferSelect }) {
       </div>
     );
   }
+  if (q.questionType === "open_text") {
+    return <input type="text" name={name} className="w-full rounded-md border border-slate-300 p-2 text-sm" />;
+  }
   return <textarea name={name} rows={3} className="w-full rounded-md border border-slate-300 p-2 text-sm" />;
 }
 

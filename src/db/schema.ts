@@ -526,7 +526,13 @@ export const interviews = pgTable("interviews", {
     .notNull(),
   guideId: uuid("guide_id").references(() => interviewGuides.id),
   personaId: uuid("persona_id").references(() => personas.id),
+  // Identificação interna livre (ex.: "P07") — mantida pra entrevistas antigas
+  // e como código opcional. Os três campos abaixo são os dados estruturados
+  // usados em relatórios (por laboratório, por cargo etc.).
   intervieweeRef: varchar("interviewee_ref", { length: 255 }),
+  intervieweeName: varchar("interviewee_name", { length: 255 }),
+  intervieweeLab: varchar("interviewee_lab", { length: 255 }),
+  intervieweeRole: varchar("interviewee_role", { length: 255 }),
   interviewDate: timestamp("interview_date", { withTimezone: true }).defaultNow().notNull(),
   transcript: text("transcript"),
   recordingUrl: text("recording_url"),
