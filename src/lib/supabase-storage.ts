@@ -8,6 +8,7 @@ const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 export const USABILITY_BUCKET = "usability-assets";
+export const INTERVIEW_BUCKET = "interview-recordings";
 
 function assertConfigured() {
   if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
@@ -87,4 +88,26 @@ export async function getSignedUrl(bucket: string, path: string, expiresInSecond
     throw new Error(body?.message || `Falha ao gerar URL assinada (HTTP ${res.status}).`);
   }
   return `${SUPABASE_URL}/storage/v1${body.signedURL}`;
+}
+
+// Upload DIRETO do navegador para o Storage (gravações de entrevista podem ter
+// dezenas de MB — o corpo de uma Server Action/rota na Vercel é limitado a
+// ~4,5 MB, então o arquivo nunca passa pelo nosso servidor). O servidor só
+// gera uma URL de envio assinada e de uso único; quem faz o PUT é o browser.
+export async function createSignedUploadUrl(bucket: string, path: string) {
+  assertConfigured();
+  const res = await fetch(`${SUPABASE_URL}/storage/v1/object/upload/sign/${bucket}/${path}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: SERVICE_ROLE_KEY!,
+      Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+    },
+    body: JSON.stringify({}),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok || !body?.url) {
+    throw new Error(body?.message || `Falha ao gerar URL de envio (HTTP ${res.status}).`);
+  }
+  return `${SUPABASE_URL}/storage/v1${body.url}`;
 }

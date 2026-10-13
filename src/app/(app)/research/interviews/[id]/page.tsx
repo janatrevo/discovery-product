@@ -5,6 +5,7 @@ import { interviewGuides, interviewGuideQuestions, interviews, personas } from "
 import { eq, desc } from "drizzle-orm";
 import { getPageContext } from "@/lib/page-context";
 import { interviewLabel } from "@/lib/interview-label";
+import { AudioUploadField } from "@/components/audio-upload-field";
 import {
   Badge,
   Button,
@@ -24,6 +25,7 @@ import {
   addGuideQuestion,
   updateGuideQuestion,
   deleteGuideQuestion,
+  createInterviewAudioUpload,
 } from "../actions";
 
 export default async function GuideDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -225,8 +227,24 @@ export default async function GuideDetailPage({ params }: { params: Promise<{ id
               </Field>
             </div>
             <Field>
+              <Label>Gravação da entrevista em áudio (opcional)</Label>
+              <AudioUploadField createUploadUrl={createInterviewAudioUpload} />
+              <p className="mt-1 text-xs text-slate-500">
+                mp3, m4a, wav, ogg, webm ou mp4. O arquivo é enviado direto para o armazenamento seguro e toca na
+                tela da entrevista junto da transcrição.
+              </p>
+            </Field>
+            <Field>
               <Label>Transcrição</Label>
-              <Textarea name="transcript" rows={8} placeholder="Cole a transcrição completa da entrevista" />
+              <Textarea
+                name="transcript"
+                rows={8}
+                placeholder={"Cole a transcrição completa. Para identificar quem fala e pular no áudio, use uma linha por fala:\n[00:12] Maria: Bom dia, vou contar como funciona...\n[00:45] Entrevistador: E como isso é feito hoje?"}
+              />
+              <p className="mt-1 text-xs text-slate-500">
+                Aceita transcrições exportadas do Fireflies, Zoom, Meet, Otter e arquivos .srt/.vtt coladas como texto
+                (nome + horário + fala). Sem marcações, o texto entra como parágrafos corridos.
+              </p>
             </Field>
             <Button type="submit">Registrar entrevista</Button>
           </form>

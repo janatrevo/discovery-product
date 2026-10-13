@@ -14,6 +14,8 @@ import { eq, and, sql } from "drizzle-orm";
 import { getPageContext } from "@/lib/page-context";
 import { linesToArray } from "@/lib/list-utils";
 import { interviewLabel } from "@/lib/interview-label";
+import { parseTranscript, speakerLabel } from "@/lib/transcript-parser";
+import { ensureBucket, createSignedUploadUrl, INTERVIEW_BUCKET } from "@/lib/supabase-storage";
 import { suggestCodes } from "@/lib/ai";
 import { recomputeHypothesis } from "@/lib/recompute-hypothesis";
 import { redirect } from "next/navigation";
@@ -161,9 +163,39 @@ export async function deleteGuideQuestion(guideId: string, questionId: string) {
   revalidatePath(`/research/interviews/${guideId}`);
 }
 
+// Caminhos de áudio só são aceitos se pertencerem ao projeto atual — evita
+// que alguém aponte uma entrevista para o arquivo de outro projeto.
+function validAudioPath(value: FormDataEntryValue | null, projectId: string): string | null {
+  const path = String(value || "").trim();
+  return path.startsWith(`interviews/${projectId}/`) && !path.includes("..") ? path : null;
+}
+
+// Passo 1 do upload de áudio: o servidor só autoriza e devolve uma URL de
+// envio assinada; o navegador manda o arquivo direto pro Storage (ver
+// src/components/audio-upload-field.tsx).
+export async function createInterviewAudioUpload(fileName: string, contentType: string) {
+  const { project, role } = await getPageContext();
+  if (role === "viewer") throw new Error("Sem permissão.");
+  if (!/^(audio|video)\//.test(contentType)) {
+    throw new Error("Envie um arquivo de áudio (mp3, m4a, wav, ogg, webm...) ou vídeo (mp4).");
+  }
+  const safeName = fileName
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9._-]+/g, "_")
+    .slice(-80);
+  const path = `interviews/${project.id}/${crypto.randomUUID()}-${safeName}`;
+  await ensureBucket(INTERVIEW_BUCKET);
+  const signedUrl = await createSignedUploadUrl(INTERVIEW_BUCKET, path);
+  return { signedUrl, path };
+}
+
 export async function logInterview(guideId: string, formData: FormData) {
   const { user, project, role } = await getPageContext();
   if (role === "viewer") throw new Error("Sem permissão.");
+
+  const transcript = String(formData.get("transcript") || "");
+  const segments = parseTranscript(transcript);
 
   const [interview] = await db
     .insert(interviews)
@@ -175,13 +207,59 @@ export async function logInterview(guideId: string, formData: FormData) {
       intervieweeName: String(formData.get("intervieweeName") || "").trim() || null,
       intervieweeLab: String(formData.get("intervieweeLab") || "").trim() || null,
       intervieweeRole: String(formData.get("intervieweeRole") || "").trim() || null,
-      transcript: String(formData.get("transcript") || ""),
+      transcript,
+      transcriptSegments: segments.length ? segments : null,
+      audioPath: validAudioPath(formData.get("audioPath"), project.id),
       createdBy: user.id,
     })
     .returning();
 
   revalidatePath(`/research/interviews/${guideId}`);
   redirect(`/research/interviews/${guideId}/interview/${interview.id}`);
+}
+
+// Troca/anexa o áudio e (re)salva a transcrição de uma entrevista já
+// registrada. Sem novo áudio selecionado, o áudio atual é mantido.
+export async function updateInterviewRecording(guideId: string, interviewId: string, formData: FormData) {
+  const { project, role } = await getPageContext();
+  if (role === "viewer") throw new Error("Sem permissão.");
+
+  const [interview] = await db.select().from(interviews).where(eq(interviews.id, interviewId)).limit(1);
+  if (!interview || interview.projectId !== project.id) throw new Error("Entrevista não encontrada.");
+
+  const transcript = String(formData.get("transcript") || "");
+  const segments = parseTranscript(transcript);
+  const audioPath = validAudioPath(formData.get("audioPath"), project.id);
+
+  await db
+    .update(interviews)
+    .set({
+      transcript,
+      transcriptSegments: segments.length ? segments : null,
+      ...(audioPath ? { audioPath } : {}),
+    })
+    .where(eq(interviews.id, interviewId));
+
+  revalidatePath(`/research/interviews/${guideId}`, "layout");
+}
+
+// Renomeia um participante da transcrição (ex.: "Speaker 1" → "Maria Silva").
+export async function renameInterviewSpeaker(interviewId: string, formData: FormData) {
+  const { project, role } = await getPageContext();
+  if (role === "viewer") throw new Error("Sem permissão.");
+
+  const from = String(formData.get("from") || "");
+  const to = String(formData.get("to") || "").trim();
+  if (!to) return;
+
+  const [interview] = await db.select().from(interviews).where(eq(interviews.id, interviewId)).limit(1);
+  if (!interview || interview.projectId !== project.id) throw new Error("Entrevista não encontrada.");
+
+  const segments = interview.transcriptSegments ?? parseTranscript(interview.transcript);
+  const renamed = segments.map((seg) => (speakerLabel(seg.speaker) === from ? { ...seg, speaker: to } : seg));
+  await db.update(interviews).set({ transcriptSegments: renamed }).where(eq(interviews.id, interviewId));
+
+  revalidatePath(`/research/interviews`, "layout");
 }
 
 export async function createCode(projectId: string, name: string) {

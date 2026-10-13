@@ -535,6 +535,13 @@ export const interviews = pgTable("interviews", {
   intervieweeRole: varchar("interviewee_role", { length: 255 }),
   interviewDate: timestamp("interview_date", { withTimezone: true }).defaultNow().notNull(),
   transcript: text("transcript"),
+  // Transcrição estruturada (gerada a partir do texto colado — ver
+  // src/lib/transcript-parser.ts): alimenta a visualização com participantes,
+  // tempo de fala e sincronia com o áudio.
+  transcriptSegments: jsonb("transcript_segments").$type<{ speaker: string; start: number | null; text: string }[]>(),
+  // Caminho do áudio no bucket privado "interview-recordings" (Supabase
+  // Storage). A URL de reprodução é assinada na hora de abrir a tela.
+  audioPath: text("audio_path"),
   recordingUrl: text("recording_url"),
   createdBy: uuid("created_by").references(() => users.id),
   createdAt: createdAt(),

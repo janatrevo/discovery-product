@@ -4,14 +4,21 @@ import { interviews, codes, codedSegments, interviewGuides, hypotheses, evidence
 import { interviewLabel } from "@/lib/interview-label";
 import { eq, desc } from "drizzle-orm";
 import { getPageContext } from "@/lib/page-context";
-import { Badge, Button, Card, Field, Input, Label, PageHeader, Select } from "@/components/ui/primitives";
+import { Badge, Button, Card, Field, Input, Label, PageHeader, Select, Textarea } from "@/components/ui/primitives";
 import {
   addCodedSegment,
   confirmSegment,
   deleteSegment,
   runAiCodeSuggestion,
   promoteInterviewToEvidence,
+  updateInterviewRecording,
+  renameInterviewSpeaker,
+  createInterviewAudioUpload,
 } from "../../../actions";
+import { AudioUploadField } from "@/components/audio-upload-field";
+import { InterviewTranscriptViewer } from "@/components/interview-transcript-viewer";
+import { parseTranscript } from "@/lib/transcript-parser";
+import { getSignedUrl, INTERVIEW_BUCKET } from "@/lib/supabase-storage";
 import { isAiEnabled } from "@/lib/ai";
 
 export default async function InterviewDetailPage({
@@ -45,8 +52,24 @@ export default async function InterviewDetailPage({
 
   const canEdit = role !== "viewer";
 
+  // Entrevistas antigas só têm o texto bruto — a transcrição estruturada é
+  // gerada na hora a partir dele.
+  const transcriptSegments = interview.transcriptSegments ?? parseTranscript(interview.transcript);
+
+  // URL assinada de curta duração (bucket privado). Se o Storage não estiver
+  // configurado/acessível, a tela continua funcionando só com a transcrição.
+  let audioUrl: string | null = null;
+  let audioError = "";
+  if (interview.audioPath) {
+    try {
+      audioUrl = await getSignedUrl(INTERVIEW_BUCKET, interview.audioPath, 60 * 60 * 6);
+    } catch (e) {
+      audioError = e instanceof Error ? e.message : "Não foi possível carregar o áudio.";
+    }
+  }
+
   return (
-    <div className="max-w-4xl grid grid-cols-1 gap-4 lg:grid-cols-2">
+    <div className="grid max-w-5xl grid-cols-1 gap-4 lg:grid-cols-2">
       <Card className="lg:col-span-2">
         <PageHeader title={`Entrevista — ${interviewLabel(interview) || "sem identificação"}`} />
         <dl className="mb-4 grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
@@ -73,8 +96,45 @@ export default async function InterviewDetailPage({
             </div>
           )}
         </dl>
-        <p className="whitespace-pre-wrap text-sm text-slate-700">{interview.transcript}</p>
       </Card>
+
+      <div className="lg:col-span-2">
+        <p className="mb-2 text-sm font-semibold text-slate-700">Transcrição e gravação</p>
+        {audioError && <p className="mb-2 text-xs text-amber-700">Áudio indisponível: {audioError}</p>}
+        <InterviewTranscriptViewer
+          segments={transcriptSegments}
+          audioUrl={audioUrl}
+          intervieweeName={interview.intervieweeName}
+          renameSpeakerAction={canEdit ? renameInterviewSpeaker.bind(null, interviewId) : undefined}
+        />
+      </div>
+
+      {canEdit && (
+        <Card className="lg:col-span-2">
+          <details>
+            <summary className="cursor-pointer text-sm font-semibold text-slate-700">
+              {interview.audioPath ? "Substituir áudio / editar transcrição" : "Anexar áudio / editar transcrição"}
+            </summary>
+            <form action={updateInterviewRecording.bind(null, guideId, interviewId)} className="mt-3">
+              <Field>
+                <Label>Gravação em áudio</Label>
+                <AudioUploadField createUploadUrl={createInterviewAudioUpload} hasExisting={!!interview.audioPath} />
+              </Field>
+              <Field>
+                <Label>Transcrição</Label>
+                <Textarea name="transcript" rows={10} defaultValue={interview.transcript ?? ""} />
+                <p className="mt-1 text-xs text-slate-500">
+                  Uma fala por linha, ex.: [00:12] Maria: texto. Ao salvar, os participantes são identificados de novo
+                  (renomeações feitas na tela serão substituídas pelo que estiver aqui).
+                </p>
+              </Field>
+              <Button type="submit" variant="secondary">
+                Salvar gravação e transcrição
+              </Button>
+            </form>
+          </details>
+        </Card>
+      )}
 
       <Card>
         <div className="mb-3 flex items-center justify-between">
