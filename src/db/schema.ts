@@ -547,6 +547,68 @@ export const interviews = pgTable("interviews", {
   createdAt: createdAt(),
 });
 
+// ---------- Vínculos pesquisa <-> hipótese / experimento (N:N) ----------
+// Uma mesma pesquisa (survey ou roteiro de entrevista) pode responder várias
+// hipóteses, e um experimento pode usar pesquisas que já existem em vez de
+// criar uma nova. As colunas antigas surveys.hypothesis_id e
+// interview_guides.hypothesis_id continuam no banco (copiadas para estas
+// tabelas pela migração), mas o app não lê mais nem grava nelas.
+export const hypothesisSurveys = pgTable(
+  "hypothesis_surveys",
+  {
+    hypothesisId: uuid("hypothesis_id")
+      .references(() => hypotheses.id, { onDelete: "cascade" })
+      .notNull(),
+    surveyId: uuid("survey_id")
+      .references(() => surveys.id, { onDelete: "cascade" })
+      .notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.hypothesisId, t.surveyId] })]
+);
+
+export const hypothesisInterviewGuides = pgTable(
+  "hypothesis_interview_guides",
+  {
+    hypothesisId: uuid("hypothesis_id")
+      .references(() => hypotheses.id, { onDelete: "cascade" })
+      .notNull(),
+    guideId: uuid("guide_id")
+      .references(() => interviewGuides.id, { onDelete: "cascade" })
+      .notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.hypothesisId, t.guideId] })]
+);
+
+export const experimentSurveys = pgTable(
+  "experiment_surveys",
+  {
+    experimentId: uuid("experiment_id")
+      .references(() => experiments.id, { onDelete: "cascade" })
+      .notNull(),
+    surveyId: uuid("survey_id")
+      .references(() => surveys.id, { onDelete: "cascade" })
+      .notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.experimentId, t.surveyId] })]
+);
+
+export const experimentInterviewGuides = pgTable(
+  "experiment_interview_guides",
+  {
+    experimentId: uuid("experiment_id")
+      .references(() => experiments.id, { onDelete: "cascade" })
+      .notNull(),
+    guideId: uuid("guide_id")
+      .references(() => interviewGuides.id, { onDelete: "cascade" })
+      .notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.experimentId, t.guideId] })]
+);
+
 export const codes = pgTable("codes", {
   id: id(),
   projectId: uuid("project_id")

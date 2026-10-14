@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { db } from "@/db";
-import { interviews, codes, codedSegments, interviewGuides, hypotheses, evidence, personas } from "@/db/schema";
+import { interviews, codes, codedSegments, interviewGuides, hypotheses, evidence, personas, hypothesisEvidence } from "@/db/schema";
+import { hypothesesForGuide } from "@/lib/research-links";
 import { interviewLabel } from "@/lib/interview-label";
 import { eq, desc } from "drizzle-orm";
 import { getPageContext } from "@/lib/page-context";
@@ -48,6 +49,15 @@ export default async function InterviewDetailPage({
     ? await db.select().from(personas).where(eq(personas.id, interview.personaId)).limit(1)
     : [];
   const promotedEvidence = promotedEvidenceRows[0];
+  const linkedHypotheses = await hypothesesForGuide(guideId);
+  const linkedHypothesisIds = new Set(linkedHypotheses.map((h) => h.id));
+  const otherHypotheses = hypothesisList.filter((h) => !linkedHypothesisIds.has(h.id));
+  const promotedLinks = promotedEvidence
+    ? await db
+        .select({ hypothesisId: hypothesisEvidence.hypothesisId, favorable: hypothesisEvidence.favorable })
+        .from(hypothesisEvidence)
+        .where(eq(hypothesisEvidence.evidenceId, promotedEvidence.id))
+    : [];
   const confirmedCount = segments.filter((s) => s.seg.confirmed).length;
 
   const canEdit = role !== "viewer";
@@ -210,19 +220,51 @@ export default async function InterviewDetailPage({
             {promotedEvidence && (
               <p className="mb-2 text-xs text-emerald-700">
                 ✓ Já promovida — última atualização {new Date(promotedEvidence.createdAt).toLocaleDateString("pt-BR")}.
+                {promotedLinks.length > 0 && (
+                  <>
+                    {" "}Hipóteses que usam esta evidência:{" "}
+                    {promotedLinks
+                      .map((l) => {
+                        const title = hypothesisList.find((h) => h.id === l.hypothesisId)?.title ?? "—";
+                        return `${title} (${l.favorable ? "favorável" : "contrária"})`;
+                      })
+                      .join("; ")}
+                    .
+                  </>
+                )}
               </p>
             )}
+            <p className="mb-2 text-xs text-slate-500">
+              Escolha a hipótese: cada hipótese que o roteiro responde guarda o seu próprio &quot;favorável / contrária&quot;.
+              Repita para cada uma.
+            </p>
             <form action={promoteInterviewToEvidence.bind(null, interviewId)} className="flex flex-wrap items-end gap-2">
-              {!guide?.hypothesisId && (
-                <Select name="hypothesisId" defaultValue="" className="max-w-xs">
-                  <option value="">Selecione a hipótese...</option>
-                  {hypothesisList.map((h) => (
-                    <option key={h.id} value={h.id}>
-                      {h.title}
-                    </option>
-                  ))}
-                </Select>
-              )}
+              <Select
+                name="hypothesisId"
+                defaultValue={linkedHypotheses.length === 1 ? linkedHypotheses[0].id : ""}
+                className="max-w-xs"
+                required
+              >
+                <option value="">Selecione a hipótese...</option>
+                {linkedHypotheses.length > 0 && (
+                  <optgroup label="Hipóteses vinculadas a este roteiro">
+                    {linkedHypotheses.map((h) => (
+                      <option key={h.id} value={h.id}>
+                        {h.title}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                {otherHypotheses.length > 0 && (
+                  <optgroup label="Outras (será vinculada)">
+                    {otherHypotheses.map((h) => (
+                      <option key={h.id} value={h.id}>
+                        {h.title}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+              </Select>
               <Select name="favorable" className="w-40" defaultValue="true">
                 <option value="true">Favorável</option>
                 <option value="false">Contrária</option>

@@ -11,8 +11,6 @@ import {
   products,
   experiments,
   opportunities,
-  surveys,
-  interviewGuides,
   usabilityTests,
   usabilityFindings,
   simulationRuns,
@@ -34,6 +32,7 @@ import { ConfidenceReceiptCard } from "@/components/hypothesis-tabs/confidence-r
 import { ExperimentsMiniList } from "@/components/hypothesis-tabs/experiments-mini";
 import { SimulationsMiniList } from "@/components/hypothesis-tabs/simulations-mini";
 import { ResearchMiniList } from "@/components/hypothesis-tabs/research-mini";
+import { surveysForHypothesis, guidesForHypothesis } from "@/lib/research-links";
 
 const TABS = [
   { key: "overview", label: "Overview" },
@@ -91,8 +90,8 @@ export default async function HypothesisWorkspacePage({
       .where(eq(hypothesisProducts.hypothesisId, id)),
     canDelete ? db.select().from(experiments).where(eq(experiments.hypothesisId, id)) : Promise.resolve([]),
     canDelete ? db.select().from(opportunities).where(eq(opportunities.hypothesisId, id)) : Promise.resolve([]),
-    canDelete ? db.select().from(surveys).where(eq(surveys.hypothesisId, id)) : Promise.resolve([]),
-    canDelete ? db.select().from(interviewGuides).where(eq(interviewGuides.hypothesisId, id)) : Promise.resolve([]),
+    canDelete ? surveysForHypothesis(id) : Promise.resolve([]),
+    canDelete ? guidesForHypothesis(id) : Promise.resolve([]),
     canDelete ? db.select().from(usabilityTests).where(eq(usabilityTests.hypothesisId, id)) : Promise.resolve([]),
     canDelete ? db.select().from(usabilityFindings).where(eq(usabilityFindings.hypothesisId, id)) : Promise.resolve([]),
     canDelete ? db.select().from(simulationRuns).where(eq(simulationRuns.hypothesisId, id)) : Promise.resolve([]),
@@ -464,7 +463,7 @@ export default async function HypothesisWorkspacePage({
 
       {tab === "evidence" && <EvidenceTab hypothesisId={id} projectId={project.id} role={role} />}
 
-      {tab === "research" && <ResearchMiniList hypothesisId={id} projectId={project.id} />}
+      {tab === "research" && <ResearchMiniList hypothesisId={id} projectId={project.id} role={role} />}
 
       {tab === "experiments" && <ExperimentsMiniList hypothesisId={id} projectId={project.id} />}
 

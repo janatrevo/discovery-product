@@ -1,8 +1,18 @@
 "use server";
 
 import { db } from "@/db";
-import { surveys, surveyQuestions, surveyResponses, surveyAnswers, evidence, hypothesisEvidence } from "@/db/schema";
-import { eq, sql } from "drizzle-orm";
+import {
+  surveys,
+  surveyQuestions,
+  surveyResponses,
+  surveyAnswers,
+  evidence,
+  hypothesisEvidence,
+  hypothesisSurveys,
+  hypotheses,
+} from "@/db/schema";
+import { and, eq, sql } from "drizzle-orm";
+import { hypothesesForSurvey } from "@/lib/research-links";
 import { getPageContext } from "@/lib/page-context";
 import { checkLeadingQuestion } from "@/lib/bias-check";
 import { linesToArray } from "@/lib/list-utils";
@@ -14,13 +24,21 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
 // Usado a partir da tela de Hipótese quando um survey é uma das razões que
-// bloqueiam a exclusão (ver checkHypothesisDeletable) — desvincula sem
-// apagar o survey (ele continua em Research & Testing, só solta a
-// hipótese).
+// bloqueiam a exclusão (ver checkHypothesisDeletable) — desvincula só ESTA
+// hipótese (o survey continua em Research & Testing e nas outras hipóteses
+// que ele responde).
 export async function unlinkHypothesisFromSurvey(surveyId: string, hypothesisId: string) {
   const { role } = await getPageContext();
   if (role !== "owner" && role !== "editor") throw new Error("Sem permissão.");
-  await db.update(surveys).set({ hypothesisId: null }).where(eq(surveys.id, surveyId));
+  await db
+    .delete(hypothesisSurveys)
+    .where(and(eq(hypothesisSurveys.surveyId, surveyId), eq(hypothesisSurveys.hypothesisId, hypothesisId)));
+  // Coluna antiga (não lida mais pelo app): solta também pra nunca travar a
+  // exclusão da hipótese por foreign key.
+  await db
+    .update(surveys)
+    .set({ hypothesisId: null })
+    .where(and(eq(surveys.id, surveyId), eq(surveys.hypothesisId, hypothesisId)));
   revalidatePath(`/research/surveys/${surveyId}`);
   revalidatePath(`/hypotheses/${hypothesisId}`);
 }
@@ -42,7 +60,6 @@ export async function createSurvey(formData: FormData) {
     .insert(surveys)
     .values({
       projectId: project.id,
-      hypothesisId,
       title: String(formData.get("title") || ""),
       objective: String(formData.get("objective") || ""),
       targetAudience: String(formData.get("targetAudience") || ""),
@@ -52,6 +69,13 @@ export async function createSurvey(formData: FormData) {
       createdBy: user.id,
     })
     .returning();
+
+  if (hypothesisId) {
+    const [hyp] = await db.select().from(hypotheses).where(eq(hypotheses.id, hypothesisId)).limit(1);
+    if (hyp && hyp.projectId === project.id) {
+      await db.insert(hypothesisSurveys).values({ hypothesisId, surveyId: created.id }).onConflictDoNothing();
+    }
+  }
 
   revalidatePath("/research/surveys");
   redirect(`/research/surveys/${created.id}`);
@@ -197,8 +221,16 @@ export async function promoteSurveyToEvidence(surveyId: string, formData: FormDa
     .where(eq(surveyResponses.surveyId, surveyId));
   if (!responseCount) throw new Error("Este survey ainda não tem respostas — nada para promover a evidência.");
 
-  const hypothesisId = String(formData.get("hypothesisId") || survey.hypothesisId || "");
-  if (!hypothesisId) throw new Error("Selecione uma hipótese para vincular esta evidência.");
+  // Uma pesquisa pode responder várias hipóteses: a evidência é uma só, mas
+  // cada hipótese tem o seu próprio "favorável / contrária".
+  let hypothesisId = String(formData.get("hypothesisId") || "");
+  if (!hypothesisId) {
+    const linked = await hypothesesForSurvey(surveyId);
+    if (linked.length === 1) hypothesisId = linked[0].id;
+  }
+  if (!hypothesisId) throw new Error("Selecione a hipótese para vincular esta evidência.");
+  const [targetHyp] = await db.select().from(hypotheses).where(eq(hypotheses.id, hypothesisId)).limit(1);
+  if (!targetHyp || targetHyp.projectId !== project.id) throw new Error("Hipótese não encontrada.");
 
   const favorable = formData.get("favorable") === "true";
 
@@ -224,26 +256,34 @@ export async function promoteSurveyToEvidence(surveyId: string, formData: FormDa
 
   const [existing] = await db.select().from(evidence).where(eq(evidence.sourceSurveyId, surveyId)).limit(1);
 
+  let evidenceId: string;
   if (existing) {
     await db.update(evidence).set(values).where(eq(evidence.id, existing.id));
-    const existingLinks = await db
-      .select()
-      .from(hypothesisEvidence)
-      .where(eq(hypothesisEvidence.evidenceId, existing.id));
-    if (existingLinks.length) {
-      await db.update(hypothesisEvidence).set({ favorable }).where(eq(hypothesisEvidence.evidenceId, existing.id));
-      for (const link of existingLinks) await recomputeHypothesis(link.hypothesisId, user.id);
-    } else {
-      await db.insert(hypothesisEvidence).values({ hypothesisId, evidenceId: existing.id, favorable });
-      await recomputeHypothesis(hypothesisId, user.id);
-    }
+    evidenceId = existing.id;
   } else {
     const [created] = await db
       .insert(evidence)
       .values({ ...values, projectId: project.id, createdBy: user.id })
       .returning();
-    await db.insert(hypothesisEvidence).values({ hypothesisId, evidenceId: created.id, favorable });
-    await recomputeHypothesis(hypothesisId, user.id);
+    evidenceId = created.id;
+  }
+
+  // Só mexe no vínculo da hipótese escolhida — as outras hipóteses que já
+  // usam esta evidência mantêm o próprio favorável/contrária.
+  await db
+    .insert(hypothesisEvidence)
+    .values({ hypothesisId, evidenceId, favorable })
+    .onConflictDoUpdate({
+      target: [hypothesisEvidence.hypothesisId, hypothesisEvidence.evidenceId],
+      set: { favorable },
+    });
+  await db.insert(hypothesisSurveys).values({ hypothesisId, surveyId }).onConflictDoNothing();
+
+  // O conteúdo da evidência pode ter mudado: recalcula todas as hipóteses que a usam.
+  const links = await db.select().from(hypothesisEvidence).where(eq(hypothesisEvidence.evidenceId, evidenceId));
+  for (const link of links) {
+    await recomputeHypothesis(link.hypothesisId, user.id);
+    revalidatePath(`/hypotheses/${link.hypothesisId}`);
   }
 
   revalidatePath(`/research/surveys/${surveyId}`);

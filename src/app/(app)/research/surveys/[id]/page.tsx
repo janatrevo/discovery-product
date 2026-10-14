@@ -1,10 +1,12 @@
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import { db } from "@/db";
-import { surveys, surveyQuestions, surveyResponses, hypotheses, evidence } from "@/db/schema";
+import { surveys, surveyQuestions, surveyResponses, hypotheses, evidence, hypothesisEvidence } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { getPageContext } from "@/lib/page-context";
 import { computeSurveyResults } from "@/lib/survey-results";
+import { hypothesesForSurvey } from "@/lib/research-links";
+import { ResearchHypothesesCard } from "@/components/research-hypotheses-card";
 import { closeSurveyIfWindowExpired, evaluateSurveyAvailability } from "@/lib/survey-window";
 import { Badge, Button, Card, Field, Input, Label, PageHeader, Select, Textarea } from "@/components/ui/primitives";
 import {
@@ -72,6 +74,15 @@ export default async function SurveyBuilderPage({ params }: { params: Promise<{ 
     db.select().from(evidence).where(eq(evidence.sourceSurveyId, id)).limit(1),
   ]);
   const promotedEvidence = promotedEvidenceRows[0];
+  const linkedHypotheses = await hypothesesForSurvey(id);
+  const linkedHypothesisIds = new Set(linkedHypotheses.map((h) => h.id));
+  const otherHypotheses = hypothesisList.filter((h) => !linkedHypothesisIds.has(h.id));
+  const promotedLinks = promotedEvidence
+    ? await db
+        .select({ hypothesisId: hypothesisEvidence.hypothesisId, favorable: hypothesisEvidence.favorable })
+        .from(hypothesisEvidence)
+        .where(eq(hypothesisEvidence.evidenceId, promotedEvidence.id))
+    : [];
 
   return (
     <div className="max-w-3xl space-y-4">
@@ -98,6 +109,8 @@ export default async function SurveyBuilderPage({ params }: { params: Promise<{ 
           </>
         }
       />
+
+      <ResearchHypothesesCard kind="survey" researchId={id} projectId={project.id} canEdit={canEdit} />
 
       {canEdit && survey.status === "draft" && (
         <Card>
@@ -382,19 +395,51 @@ export default async function SurveyBuilderPage({ params }: { params: Promise<{ 
                   ✓ Já promovido — última atualização{" "}
                   {new Date(promotedEvidence.createdAt).toLocaleDateString("pt-BR")}. Promover de novo
                   atualiza o conteúdo.
+                  {promotedLinks.length > 0 && (
+                    <>
+                      {" "}Hipóteses que usam esta evidência:{" "}
+                      {promotedLinks
+                        .map((l) => {
+                          const title = hypothesisList.find((h) => h.id === l.hypothesisId)?.title ?? "—";
+                          return `${title} (${l.favorable ? "favorável" : "contrária"})`;
+                        })
+                        .join("; ")}
+                      .
+                    </>
+                  )}
                 </p>
               )}
+              <p className="mb-2 text-xs text-slate-500">
+                Escolha a hipótese: cada hipótese que este survey responde guarda o seu próprio
+                &quot;favorável / contrária&quot;. Repita para cada uma.
+              </p>
               <form action={promoteSurveyToEvidence.bind(null, id)} className="flex flex-wrap items-end gap-2">
-                {!survey.hypothesisId && (
-                  <Select name="hypothesisId" defaultValue="" className="max-w-xs">
-                    <option value="">Selecione a hipótese...</option>
-                    {hypothesisList.map((h) => (
-                      <option key={h.id} value={h.id}>
-                        {h.title}
-                      </option>
-                    ))}
-                  </Select>
-                )}
+                <Select
+                  name="hypothesisId"
+                  defaultValue={linkedHypotheses.length === 1 ? linkedHypotheses[0].id : ""}
+                  className="max-w-xs"
+                  required
+                >
+                  <option value="">Selecione a hipótese...</option>
+                  {linkedHypotheses.length > 0 && (
+                    <optgroup label="Hipóteses vinculadas a este survey">
+                      {linkedHypotheses.map((h) => (
+                        <option key={h.id} value={h.id}>
+                          {h.title}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {otherHypotheses.length > 0 && (
+                    <optgroup label="Outras (será vinculada)">
+                      {otherHypotheses.map((h) => (
+                        <option key={h.id} value={h.id}>
+                          {h.title}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                </Select>
                 <Select name="favorable" className="w-40" defaultValue="true">
                   <option value="true">Favorável</option>
                   <option value="false">Contrária</option>

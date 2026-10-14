@@ -9,8 +9,11 @@ import {
   codedSegments,
   evidence,
   hypothesisEvidence,
+  hypothesisInterviewGuides,
+  hypotheses,
 } from "@/db/schema";
 import { eq, and, sql } from "drizzle-orm";
+import { hypothesesForGuide } from "@/lib/research-links";
 import { getPageContext } from "@/lib/page-context";
 import { linesToArray } from "@/lib/list-utils";
 import { interviewLabel } from "@/lib/interview-label";
@@ -35,12 +38,20 @@ export async function unlinkPersonaFromInterview(interviewId: string, personaId:
 
 // Usado a partir da tela de Hipótese quando um roteiro de entrevista é uma
 // das razões que bloqueiam a exclusão (ver checkHypothesisDeletable) —
-// desvincula sem apagar o roteiro (ele continua em Research & Testing, só
-// solta a hipótese).
+// desvincula só ESTA hipótese (o roteiro continua em Research & Testing e
+// nas outras hipóteses que ele responde).
 export async function unlinkHypothesisFromGuide(guideId: string, hypothesisId: string) {
   const { role } = await getPageContext();
   if (role !== "owner" && role !== "editor") throw new Error("Sem permissão.");
-  await db.update(interviewGuides).set({ hypothesisId: null }).where(eq(interviewGuides.id, guideId));
+  await db
+    .delete(hypothesisInterviewGuides)
+    .where(and(eq(hypothesisInterviewGuides.guideId, guideId), eq(hypothesisInterviewGuides.hypothesisId, hypothesisId)));
+  // Coluna antiga (não lida mais pelo app): solta também pra nunca travar a
+  // exclusão da hipótese por foreign key.
+  await db
+    .update(interviewGuides)
+    .set({ hypothesisId: null })
+    .where(and(eq(interviewGuides.id, guideId), eq(interviewGuides.hypothesisId, hypothesisId)));
   revalidatePath(`/research/interviews/${guideId}`);
   revalidatePath(`/hypotheses/${hypothesisId}`);
 }
@@ -54,7 +65,6 @@ export async function createGuide(formData: FormData) {
     .insert(interviewGuides)
     .values({
       projectId: project.id,
-      hypothesisId,
       title: String(formData.get("title") || ""),
       objective: String(formData.get("objective") || ""),
       scenario: String(formData.get("scenario") || ""),
@@ -65,6 +75,13 @@ export async function createGuide(formData: FormData) {
       createdBy: user.id,
     })
     .returning();
+
+  if (hypothesisId) {
+    const [hyp] = await db.select().from(hypotheses).where(eq(hypotheses.id, hypothesisId)).limit(1);
+    if (hyp && hyp.projectId === project.id) {
+      await db.insert(hypothesisInterviewGuides).values({ hypothesisId, guideId: guide.id }).onConflictDoNothing();
+    }
+  }
 
   const questionLines = linesToArray(formData.get("questions"));
   if (questionLines.length) {
@@ -328,12 +345,16 @@ export async function promoteInterviewToEvidence(interviewId: string, formData: 
     throw new Error("Confirme ao menos um trecho codificado antes de promover esta entrevista a evidência.");
   }
 
+  // Uma pesquisa pode responder várias hipóteses: a evidência é uma só, mas
+  // cada hipótese tem o seu próprio "favorável / contrária".
   let hypothesisId = String(formData.get("hypothesisId") || "");
   if (!hypothesisId && interview.guideId) {
-    const [guide] = await db.select().from(interviewGuides).where(eq(interviewGuides.id, interview.guideId)).limit(1);
-    hypothesisId = guide?.hypothesisId || "";
+    const linked = await hypothesesForGuide(interview.guideId);
+    if (linked.length === 1) hypothesisId = linked[0].id;
   }
-  if (!hypothesisId) throw new Error("Selecione uma hipótese para vincular esta evidência.");
+  if (!hypothesisId) throw new Error("Selecione a hipótese para vincular esta evidência.");
+  const [targetHyp] = await db.select().from(hypotheses).where(eq(hypotheses.id, hypothesisId)).limit(1);
+  if (!targetHyp || targetHyp.projectId !== project.id) throw new Error("Hipótese não encontrada.");
 
   const favorable = formData.get("favorable") === "true";
 
@@ -359,26 +380,39 @@ export async function promoteInterviewToEvidence(interviewId: string, formData: 
 
   const [existing] = await db.select().from(evidence).where(eq(evidence.sourceInterviewId, interviewId)).limit(1);
 
+  let evidenceId: string;
   if (existing) {
     await db.update(evidence).set(values).where(eq(evidence.id, existing.id));
-    const existingLinks = await db
-      .select()
-      .from(hypothesisEvidence)
-      .where(eq(hypothesisEvidence.evidenceId, existing.id));
-    if (existingLinks.length) {
-      await db.update(hypothesisEvidence).set({ favorable }).where(eq(hypothesisEvidence.evidenceId, existing.id));
-      for (const link of existingLinks) await recomputeHypothesis(link.hypothesisId, user.id);
-    } else {
-      await db.insert(hypothesisEvidence).values({ hypothesisId, evidenceId: existing.id, favorable });
-      await recomputeHypothesis(hypothesisId, user.id);
-    }
+    evidenceId = existing.id;
   } else {
     const [created] = await db
       .insert(evidence)
       .values({ ...values, projectId: project.id, createdBy: user.id })
       .returning();
-    await db.insert(hypothesisEvidence).values({ hypothesisId, evidenceId: created.id, favorable });
-    await recomputeHypothesis(hypothesisId, user.id);
+    evidenceId = created.id;
+  }
+
+  // Só mexe no vínculo da hipótese escolhida — as outras hipóteses que já
+  // usam esta evidência mantêm o próprio favorável/contrária.
+  await db
+    .insert(hypothesisEvidence)
+    .values({ hypothesisId, evidenceId, favorable })
+    .onConflictDoUpdate({
+      target: [hypothesisEvidence.hypothesisId, hypothesisEvidence.evidenceId],
+      set: { favorable },
+    });
+  if (interview.guideId) {
+    await db
+      .insert(hypothesisInterviewGuides)
+      .values({ hypothesisId, guideId: interview.guideId })
+      .onConflictDoNothing();
+  }
+
+  // O conteúdo da evidência pode ter mudado: recalcula todas as hipóteses que a usam.
+  const links = await db.select().from(hypothesisEvidence).where(eq(hypothesisEvidence.evidenceId, evidenceId));
+  for (const link of links) {
+    await recomputeHypothesis(link.hypothesisId, user.id);
+    revalidatePath(`/hypotheses/${link.hypothesisId}`);
   }
 
   revalidatePath(`/research/interviews`, "layout");

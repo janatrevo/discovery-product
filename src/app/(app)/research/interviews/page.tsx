@@ -1,22 +1,22 @@
 import Link from "next/link";
 import { getPageContext } from "@/lib/page-context";
 import { db } from "@/db";
-import { interviewGuides, interviews, hypotheses } from "@/db/schema";
+import { interviewGuides, interviews } from "@/db/schema";
 import { eq, desc, sql } from "drizzle-orm";
 import { Badge, Button, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
+import { hypothesesByGuideIds } from "@/lib/research-links";
 
 export default async function InterviewGuidesPage() {
   const { project } = await getPageContext();
-  const [list, hypothesisList, interviewCounts] = await Promise.all([
+  const [list, interviewCounts] = await Promise.all([
     db.select().from(interviewGuides).where(eq(interviewGuides.projectId, project.id)).orderBy(desc(interviewGuides.createdAt)),
-    db.select().from(hypotheses).where(eq(hypotheses.projectId, project.id)),
     db
       .select({ guideId: interviews.guideId, count: sql<number>`count(*)::int` })
       .from(interviews)
       .where(eq(interviews.projectId, project.id))
       .groupBy(interviews.guideId),
   ]);
-  const hypothesisTitle = (id: string | null) => hypothesisList.find((h) => h.id === id)?.title;
+  const hypothesesByGuide = await hypothesesByGuideIds(list.map((g) => g.id));
   const countFor = (guideId: string) => interviewCounts.find((c) => c.guideId === guideId)?.count ?? 0;
 
   return (
@@ -45,7 +45,12 @@ export default async function InterviewGuidesPage() {
                   <Badge color="indigo">{countFor(g.id)} entrevista(s)</Badge>
                 </div>
                 <p className="mt-1 text-xs text-slate-500">{g.objective}</p>
-                {g.hypothesisId && <p className="mt-2 text-xs text-slate-400">Hipótese: {hypothesisTitle(g.hypothesisId)}</p>}
+                {(hypothesesByGuide.get(g.id)?.length ?? 0) > 0 && (
+                  <p className="mt-2 text-xs text-slate-400">
+                    {hypothesesByGuide.get(g.id)!.length === 1 ? "Hipótese" : "Hipóteses"}:{" "}
+                    {hypothesesByGuide.get(g.id)!.map((h) => h.title).join(" · ")}
+                  </p>
+                )}
               </Card>
             </Link>
           ))}

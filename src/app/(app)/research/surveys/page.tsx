@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { getPageContext } from "@/lib/page-context";
 import { db } from "@/db";
-import { surveys, hypotheses } from "@/db/schema";
+import { surveys } from "@/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { Badge, Button, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { evaluateSurveyAvailability } from "@/lib/survey-window";
+import { hypothesesBySurveyIds } from "@/lib/research-links";
 
 const STATUS_COLOR: Record<string, "slate" | "sky" | "emerald" | "amber"> = {
   draft: "slate",
@@ -15,11 +16,8 @@ const STATUS_COLOR: Record<string, "slate" | "sky" | "emerald" | "amber"> = {
 
 export default async function SurveysPage() {
   const { project } = await getPageContext();
-  const [list, hypothesisList] = await Promise.all([
-    db.select().from(surveys).where(eq(surveys.projectId, project.id)).orderBy(desc(surveys.createdAt)),
-    db.select().from(hypotheses).where(eq(hypotheses.projectId, project.id)),
-  ]);
-  const hypothesisTitle = (id: string | null) => hypothesisList.find((h) => h.id === id)?.title;
+  const list = await db.select().from(surveys).where(eq(surveys.projectId, project.id)).orderBy(desc(surveys.createdAt));
+  const hypothesesBySurvey = await hypothesesBySurveyIds(list.map((s) => s.id));
 
   return (
     <div className="max-w-3xl">
@@ -56,7 +54,12 @@ export default async function SurveysPage() {
                     <Badge color={STATUS_COLOR[displayStatus] ?? "slate"}>{displayLabel}</Badge>
                   </div>
                   <p className="mt-1 text-xs text-slate-500">{s.objective}</p>
-                  {s.hypothesisId && <p className="mt-2 text-xs text-slate-400">Hipótese: {hypothesisTitle(s.hypothesisId)}</p>}
+                  {(hypothesesBySurvey.get(s.id)?.length ?? 0) > 0 && (
+                    <p className="mt-2 text-xs text-slate-400">
+                      {hypothesesBySurvey.get(s.id)!.length === 1 ? "Hipótese" : "Hipóteses"}:{" "}
+                      {hypothesesBySurvey.get(s.id)!.map((h) => h.title).join(" · ")}
+                    </p>
+                  )}
                 </Card>
               </Link>
             );

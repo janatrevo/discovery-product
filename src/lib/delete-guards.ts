@@ -16,8 +16,8 @@ import { sql, eq } from "drizzle-orm";
 import {
   experiments,
   opportunities,
-  surveys,
-  interviewGuides,
+  hypothesisSurveys,
+  hypothesisInterviewGuides,
   usabilityTests,
   usabilityFindings,
   simulationRuns,
@@ -43,8 +43,8 @@ export async function checkHypothesisDeletable(hypothesisId: string): Promise<st
   ] = await Promise.all([
     db.select({ count: sql<number>`count(*)::int` }).from(experiments).where(eq(experiments.hypothesisId, hypothesisId)),
     db.select({ count: sql<number>`count(*)::int` }).from(opportunities).where(eq(opportunities.hypothesisId, hypothesisId)),
-    db.select({ count: sql<number>`count(*)::int` }).from(surveys).where(eq(surveys.hypothesisId, hypothesisId)),
-    db.select({ count: sql<number>`count(*)::int` }).from(interviewGuides).where(eq(interviewGuides.hypothesisId, hypothesisId)),
+    db.select({ count: sql<number>`count(*)::int` }).from(hypothesisSurveys).where(eq(hypothesisSurveys.hypothesisId, hypothesisId)),
+    db.select({ count: sql<number>`count(*)::int` }).from(hypothesisInterviewGuides).where(eq(hypothesisInterviewGuides.hypothesisId, hypothesisId)),
     db.select({ count: sql<number>`count(*)::int` }).from(usabilityTests).where(eq(usabilityTests.hypothesisId, hypothesisId)),
     db.select({ count: sql<number>`count(*)::int` }).from(usabilityFindings).where(eq(usabilityFindings.hypothesisId, hypothesisId)),
     db.select({ count: sql<number>`count(*)::int` }).from(simulationRuns).where(eq(simulationRuns.hypothesisId, hypothesisId)),

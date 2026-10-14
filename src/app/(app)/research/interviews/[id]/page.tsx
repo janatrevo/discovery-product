@@ -6,6 +6,7 @@ import { eq, desc } from "drizzle-orm";
 import { getPageContext } from "@/lib/page-context";
 import { interviewLabel } from "@/lib/interview-label";
 import { AudioUploadField } from "@/components/audio-upload-field";
+import { ResearchHypothesesCard } from "@/components/research-hypotheses-card";
 import {
   Badge,
   Button,
@@ -59,6 +60,8 @@ export default async function GuideDetailPage({ params }: { params: Promise<{ id
           </>
         }
       />
+
+      <ResearchHypothesesCard kind="guide" researchId={id} projectId={project.id} canEdit={canEdit} />
 
       {canEdit && isDraft && (
         <Card>

@@ -1,8 +1,18 @@
 "use server";
 
 import { db } from "@/db";
-import { experiments, evidence, hypothesisEvidence } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import {
+  experiments,
+  evidence,
+  hypothesisEvidence,
+  surveys,
+  interviewGuides,
+  experimentSurveys,
+  experimentInterviewGuides,
+  hypothesisSurveys,
+  hypothesisInterviewGuides,
+} from "@/db/schema";
+import { and, eq, inArray } from "drizzle-orm";
 import { getPageContext } from "@/lib/page-context";
 import { recomputeHypothesis } from "@/lib/recompute-hypothesis";
 import { redirect } from "next/navigation";
@@ -39,9 +49,57 @@ export async function deleteExperiment(experimentId: string, redirectTo?: string
   if (redirectTo) redirect(redirectTo);
 }
 
+// Vincula pesquisas que JÁ EXISTEM ao experimento (e à hipótese dele) — em
+// vez de criar uma pesquisa nova. Só aceita ids do próprio projeto.
+async function attachResearchToExperiment(
+  projectId: string,
+  experimentId: string,
+  hypothesisId: string,
+  surveyIds: string[],
+  guideIds: string[]
+) {
+  if (surveyIds.length) {
+    const valid = await db
+      .select({ id: surveys.id })
+      .from(surveys)
+      .where(and(eq(surveys.projectId, projectId), inArray(surveys.id, surveyIds)));
+    if (valid.length) {
+      await db
+        .insert(experimentSurveys)
+        .values(valid.map((v) => ({ experimentId, surveyId: v.id })))
+        .onConflictDoNothing();
+      await db
+        .insert(hypothesisSurveys)
+        .values(valid.map((v) => ({ hypothesisId, surveyId: v.id })))
+        .onConflictDoNothing();
+    }
+  }
+  if (guideIds.length) {
+    const valid = await db
+      .select({ id: interviewGuides.id })
+      .from(interviewGuides)
+      .where(and(eq(interviewGuides.projectId, projectId), inArray(interviewGuides.id, guideIds)));
+    if (valid.length) {
+      await db
+        .insert(experimentInterviewGuides)
+        .values(valid.map((v) => ({ experimentId, guideId: v.id })))
+        .onConflictDoNothing();
+      await db
+        .insert(hypothesisInterviewGuides)
+        .values(valid.map((v) => ({ hypothesisId, guideId: v.id })))
+        .onConflictDoNothing();
+    }
+  }
+}
+
 export async function createExperiment(hypothesisId: string, formData: FormData) {
   const { user, project, role } = await getPageContext();
   if (role === "viewer") throw new Error("Sem permissão.");
+
+  const method = String(formData.get("method") || "interview");
+  // Pesquisas já existentes só valem para o método correspondente.
+  const surveyIds = method === "survey" ? formData.getAll("surveyIds").map(String).filter(Boolean) : [];
+  const guideIds = method === "interview" ? formData.getAll("guideIds").map(String).filter(Boolean) : [];
 
   const [created] = await db
     .insert(experiments)
@@ -51,7 +109,7 @@ export async function createExperiment(hypothesisId: string, formData: FormData)
       objective: String(formData.get("objective") || ""),
       personaId: String(formData.get("personaId") || "") || null,
       variable: String(formData.get("variable") || ""),
-      method: String(formData.get("method") || "interview") as never,
+      method: method as never,
       metric: String(formData.get("metric") || ""),
       samplePlanned: Number(formData.get("samplePlanned") || 0) || null,
       resultExpected: String(formData.get("resultExpected") || ""),
@@ -59,8 +117,54 @@ export async function createExperiment(hypothesisId: string, formData: FormData)
     })
     .returning();
 
+  await attachResearchToExperiment(project.id, created.id, hypothesisId, surveyIds, guideIds);
+
   revalidatePath(`/hypotheses/${hypothesisId}`);
   redirect(`/experiments/${created.id}`);
+}
+
+// Adiciona uma pesquisa existente a um experimento que já foi criado.
+export async function linkResearchToExperiment(formData: FormData) {
+  const { project, role } = await getPageContext();
+  if (role === "viewer") throw new Error("Sem permissão.");
+  const experimentId = String(formData.get("experimentId") || "");
+  const surveyId = String(formData.get("surveyId") || "");
+  const guideId = String(formData.get("guideId") || "");
+  if (!surveyId && !guideId) throw new Error("Selecione a pesquisa.");
+  const [exp] = await db.select().from(experiments).where(eq(experiments.id, experimentId)).limit(1);
+  if (!exp || exp.projectId !== project.id) throw new Error("Experimento não encontrado.");
+  await attachResearchToExperiment(
+    project.id,
+    experimentId,
+    exp.hypothesisId,
+    surveyId ? [surveyId] : [],
+    guideId ? [guideId] : []
+  );
+  revalidatePath(`/experiments/${experimentId}`);
+  revalidatePath(`/hypotheses/${exp.hypothesisId}`);
+}
+
+// Tira a pesquisa SÓ do experimento — ela continua vinculada à hipótese (se
+// quiser soltar de lá também, é na aba "Pesquisa" da hipótese).
+export async function unlinkResearchFromExperiment(formData: FormData) {
+  const { project, role } = await getPageContext();
+  if (role === "viewer") throw new Error("Sem permissão.");
+  const experimentId = String(formData.get("experimentId") || "");
+  const surveyId = String(formData.get("surveyId") || "");
+  const guideId = String(formData.get("guideId") || "");
+  const [exp] = await db.select().from(experiments).where(eq(experiments.id, experimentId)).limit(1);
+  if (!exp || exp.projectId !== project.id) throw new Error("Experimento não encontrado.");
+  if (surveyId) {
+    await db
+      .delete(experimentSurveys)
+      .where(and(eq(experimentSurveys.experimentId, experimentId), eq(experimentSurveys.surveyId, surveyId)));
+  }
+  if (guideId) {
+    await db
+      .delete(experimentInterviewGuides)
+      .where(and(eq(experimentInterviewGuides.experimentId, experimentId), eq(experimentInterviewGuides.guideId, guideId)));
+  }
+  revalidatePath(`/experiments/${experimentId}`);
 }
 
 // Trava o critério de sucesso ANTES do resultado — o timestamp impede

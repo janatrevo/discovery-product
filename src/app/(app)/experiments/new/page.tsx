@@ -1,12 +1,14 @@
 import { notFound } from "next/navigation";
 import { db } from "@/db";
-import { hypotheses, personas } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { hypotheses, personas, surveys, interviewGuides, surveyResponses, interviews } from "@/db/schema";
+import { eq, sql } from "drizzle-orm";
 import { getPageContext } from "@/lib/page-context";
 import { createExperiment } from "../actions";
 import { recommendExperimentMethods } from "@/lib/ai";
 import { HYPOTHESIS_TYPES } from "@/lib/hypothesis-types";
 import { Button, Card, Field, Input, Label, PageHeader, Select, Textarea } from "@/components/ui/primitives";
+import { ExperimentMethodFields } from "@/components/experiment-method-fields";
+import { surveysForHypothesis, guidesForHypothesis } from "@/lib/research-links";
 
 const METHOD_LABELS: Record<string, string> = {
   interview: "Entrevista",
@@ -31,7 +33,43 @@ export default async function NewExperimentPage({
   const [hyp] = await db.select().from(hypotheses).where(eq(hypotheses.id, hypothesisId)).limit(1);
   if (!hyp || hyp.projectId !== project.id) notFound();
 
-  const personaOptions = await db.select().from(personas).where(eq(personas.projectId, project.id));
+  const [personaOptions, allSurveys, allGuides, linkedSurveys, linkedGuides, responseCounts, interviewCounts] =
+    await Promise.all([
+      db.select().from(personas).where(eq(personas.projectId, project.id)),
+      db.select().from(surveys).where(eq(surveys.projectId, project.id)),
+      db.select().from(interviewGuides).where(eq(interviewGuides.projectId, project.id)),
+      surveysForHypothesis(hypothesisId),
+      guidesForHypothesis(hypothesisId),
+      db
+        .select({ surveyId: surveyResponses.surveyId, count: sql<number>`count(*)::int` })
+        .from(surveyResponses)
+        .groupBy(surveyResponses.surveyId),
+      db
+        .select({ guideId: interviews.guideId, count: sql<number>`count(*)::int` })
+        .from(interviews)
+        .where(eq(interviews.projectId, project.id))
+        .groupBy(interviews.guideId),
+    ]);
+
+  // Pesquisas já vinculadas a esta hipótese aparecem primeiro na lista.
+  const linkedSurveyIds = new Set(linkedSurveys.map((s) => s.id));
+  const linkedGuideIds = new Set(linkedGuides.map((g) => g.id));
+  const surveyOptions = allSurveys
+    .map((s) => ({
+      id: s.id,
+      title: s.title,
+      detail: `${s.status} · ${responseCounts.find((r) => r.surveyId === s.id)?.count ?? 0} resposta(s)`,
+      linked: linkedSurveyIds.has(s.id),
+    }))
+    .sort((a, b) => Number(b.linked) - Number(a.linked));
+  const guideOptions = allGuides
+    .map((g) => ({
+      id: g.id,
+      title: g.title,
+      detail: `${interviewCounts.find((c) => c.guideId === g.id)?.count ?? 0} entrevista(s)`,
+      linked: linkedGuideIds.has(g.id),
+    }))
+    .sort((a, b) => Number(b.linked) - Number(a.linked));
   const recommendations = recommendExperimentMethods(hyp.type);
   const typeInfo = HYPOTHESIS_TYPES.find((t) => t.value === hyp.type);
 
@@ -62,30 +100,25 @@ export default async function NewExperimentPage({
             <Label>Objetivo</Label>
             <Textarea name="objective" rows={2} />
           </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field>
-              <Label>Método</Label>
-              <Select name="method" defaultValue={recommendations[0]?.method ?? "interview"}>
-                {Object.entries(METHOD_LABELS).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field>
-              <Label>Persona</Label>
-              <Select name="personaId" defaultValue="">
-                <option value="">—</option>
-                {personaOptions.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                    {p.jobTitle ? ` — ${p.jobTitle}` : ""}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-          </div>
+          <ExperimentMethodFields
+            methods={Object.entries(METHOD_LABELS).map(([value, label]) => ({ value, label }))}
+            defaultMethod={recommendations[0]?.method ?? "interview"}
+            surveys={surveyOptions}
+            guides={guideOptions}
+            hypothesisId={hypothesisId}
+          />
+          <Field>
+            <Label>Persona</Label>
+            <Select name="personaId" defaultValue="">
+              <option value="">—</option>
+              {personaOptions.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                  {p.jobTitle ? ` — ${p.jobTitle}` : ""}
+                </option>
+              ))}
+            </Select>
+          </Field>
           <Field>
             <Label>Variável testada</Label>
             <Input name="variable" />

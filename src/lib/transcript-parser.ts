@@ -16,11 +16,11 @@ export type TranscriptSegment = { speaker: string; start: number | null; text: s
 const TIME = String.raw`(?:\d{1,2}:)?\d{1,2}:\d{2}(?:[.,]\d{1,3})?`;
 
 const RE_CUE = new RegExp(String.raw`^(${TIME})\s*-->\s*(${TIME})`);
-const RE_TIME_FIRST = new RegExp(String.raw`^[\[(]?(${TIME})[\])]?\s*[-–—]?\s*([^:\[\](){}]{1,60}?)\s*:\s*(.*)$`);
+const RE_TIME_FIRST = new RegExp(String.raw`^[\[(]?(${TIME})[\])]?\s*[-–—]?\s*([^:\[\]{}]{1,60}?)\s*:\s*(.*)$`);
 const RE_SPEAKER_FIRST = new RegExp(String.raw`^([^:\[\](){}]{1,60}?)\s*[\[(]\s*(${TIME})\s*[\])]\s*[:\-–—]?\s*(.*)$`);
 const RE_HEADER_NAME_TIME = new RegExp(String.raw`^([^\d:\[\](){}.,;!?][^:\[\](){}.,;!?]{0,38}?)\s+(${TIME})$`);
 const RE_HEADER_TIME_NAME = new RegExp(String.raw`^[\[(]?(${TIME})[\])]?\s+([^\d:\[\](){}.,;!?][^:\[\](){}.,;!?]{0,38})$`);
-const RE_SPEAKER_ONLY = /^([A-Za-zÀ-ÿ][^:\[\](){}]{0,39}?):\s+(.+)$/;
+const RE_SPEAKER_ONLY = /^([A-Za-zÀ-ÿ][^:\[\]{}]{0,39}?):\s+(.+)$/;
 const RE_VOICE_TAG = /^<v(?:\.[^\s>]+)?\s+([^>]+)>(.*?)(?:<\/v>)?$/;
 
 export function parseTimestamp(s: string): number {
