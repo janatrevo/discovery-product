@@ -146,6 +146,9 @@ export default async function HypothesisWorkspacePage({
         actions={
           <>
             <Badge color={STATUS_COLORS[hyp.status]}>{STATUS_LABELS[hyp.status]}</Badge>
+            <Link href={`/hypotheses/${id}?tab=research`}>
+              <Button variant="secondary">Analisar com IA</Button>
+            </Link>
             <Link href={`/opportunities/new?hypothesisId=${id}`}>
               <Button variant="secondary">+ Oportunidade</Button>
             </Link>

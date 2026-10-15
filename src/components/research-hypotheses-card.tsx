@@ -52,6 +52,10 @@ export async function ResearchHypothesesCard({
               <Link href={`/hypotheses/${h.id}`} className="text-indigo-700 hover:underline">
                 {h.title}
               </Link>
+              <span className="flex items-center gap-3">
+                <Link href={`/hypotheses/${h.id}?tab=research`} className="text-xs font-medium text-indigo-600 hover:underline">
+                  Analisar com IA
+                </Link>
               {canEdit && (
                 <form action={unlinkAction}>
                   <input type="hidden" name={idField} value={researchId} />
@@ -61,6 +65,7 @@ export async function ResearchHypothesesCard({
                   </button>
                 </form>
               )}
+              </span>
             </li>
           ))}
         </ul>
