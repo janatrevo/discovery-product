@@ -16,54 +16,41 @@ import { sql, eq } from "drizzle-orm";
 import {
   experiments,
   opportunities,
-  hypothesisSurveys,
-  hypothesisInterviewGuides,
-  usabilityTests,
   usabilityFindings,
-  simulationRuns,
   simulationResponses,
   evidence,
   interviews,
   decisions,
-  personas,
 } from "@/db/schema";
 
+// Hipótese: quase tudo que está ligado a ela é apagado junto (experimentos,
+// oportunidades, testes de usabilidade, simulações) ou só desvinculado
+// (surveys, roteiros, achados, personas, evidências) quando ela é excluída —
+// ver deleteHypothesis em src/app/(app)/hypotheses/actions.ts. A ÚNICA coisa
+// que bloqueia é o Decision Log: decisão registrada é histórico e nunca fica
+// com referência quebrada.
 export async function checkHypothesisDeletable(hypothesisId: string): Promise<string[]> {
   const reasons: string[] = [];
 
-  const [
-    [{ count: experimentCount }],
-    [{ count: opportunityCount }],
-    [{ count: surveyCount }],
-    [{ count: guideCount }],
-    [{ count: usabilityTestCount }],
-    [{ count: usabilityFindingCount }],
-    [{ count: simulationCount }],
-    decisionsReferencing,
-  ] = await Promise.all([
-    db.select({ count: sql<number>`count(*)::int` }).from(experiments).where(eq(experiments.hypothesisId, hypothesisId)),
-    db.select({ count: sql<number>`count(*)::int` }).from(opportunities).where(eq(opportunities.hypothesisId, hypothesisId)),
-    db.select({ count: sql<number>`count(*)::int` }).from(hypothesisSurveys).where(eq(hypothesisSurveys.hypothesisId, hypothesisId)),
-    db.select({ count: sql<number>`count(*)::int` }).from(hypothesisInterviewGuides).where(eq(hypothesisInterviewGuides.hypothesisId, hypothesisId)),
-    db.select({ count: sql<number>`count(*)::int` }).from(usabilityTests).where(eq(usabilityTests.hypothesisId, hypothesisId)),
-    db.select({ count: sql<number>`count(*)::int` }).from(usabilityFindings).where(eq(usabilityFindings.hypothesisId, hypothesisId)),
-    db.select({ count: sql<number>`count(*)::int` }).from(simulationRuns).where(eq(simulationRuns.hypothesisId, hypothesisId)),
+  const [decisionsReferencing, decisionsViaOpportunity] = await Promise.all([
     db.select({ id: decisions.id }).from(decisions).where(sql`${decisions.hypothesisRefs} @> ${JSON.stringify([hypothesisId])}::jsonb`),
+    db
+      .select({ id: decisions.id })
+      .from(decisions)
+      .innerJoin(opportunities, eq(opportunities.id, decisions.opportunityId))
+      .where(eq(opportunities.hypothesisId, hypothesisId)),
   ]);
 
-  if (experimentCount > 0) reasons.push(`${experimentCount} experimento(s) vinculado(s)`);
-  if (opportunityCount > 0) reasons.push(`${opportunityCount} oportunidade(s) do Discovery Board vinculada(s)`);
-  if (surveyCount > 0) reasons.push(`${surveyCount} survey(s) vinculado(s)`);
-  if (guideCount > 0) reasons.push(`${guideCount} roteiro(s) de entrevista vinculado(s)`);
-  if (usabilityTestCount > 0) reasons.push(`${usabilityTestCount} teste(s) de usabilidade vinculado(s)`);
-  if (usabilityFindingCount > 0) reasons.push(`${usabilityFindingCount} achado(s) de usabilidade vinculado(s)`);
-  if (simulationCount > 0) reasons.push(`${simulationCount} simulação(ões) de persona vinculada(s)`);
   if (decisionsReferencing.length > 0) {
     reasons.push(
       `${decisionsReferencing.length} decisão(ões) já registrada(s) cita(m) esta hipótese — para preservar o histórico, hipóteses citadas em decisões nunca podem ser excluídas`
     );
   }
-
+  if (decisionsViaOpportunity.length > 0) {
+    reasons.push(
+      `${decisionsViaOpportunity.length} decisão(ões) já registrada(s) está(ão) ligada(s) a oportunidades desta hipótese — para preservar o histórico, essas oportunidades não podem ser apagadas`
+    );
+  }
   return reasons;
 }
 
@@ -96,15 +83,10 @@ export async function checkPersonaDeletable(personaId: string): Promise<string[]
   return reasons;
 }
 
-export async function checkProductDeletable(productId: string): Promise<string[]> {
-  const reasons: string[] = [];
-  const [[{ count: simulationCount }], [{ count: personaCount }]] = await Promise.all([
-    db.select({ count: sql<number>`count(*)::int` }).from(simulationRuns).where(eq(simulationRuns.productId, productId)),
-    db.select({ count: sql<number>`count(*)::int` }).from(personas).where(eq(personas.productId, productId)),
-  ]);
-  if (simulationCount > 0) reasons.push(`${simulationCount} simulação(ões) vinculada(s)`);
-  if (personaCount > 0) reasons.push(`${personaCount} persona(s) vinculada(s)`);
-  return reasons;
+// Produto: não bloqueia mais nada — simulações do produto são apagadas e
+// personas só são desvinculadas (ver deleteProduct em products/actions.ts).
+export async function checkProductDeletable(_productId: string): Promise<string[]> {
+  return [];
 }
 
 export function deleteBlockedMessage(entityLabel: string, reasons: string[]) {

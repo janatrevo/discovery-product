@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { Badge, Card } from "@/components/ui/primitives";
-import { reorderHypotheses, moveHypothesisToColumn } from "@/app/(app)/hypotheses/actions";
+import { reorderHypotheses, moveHypothesisToColumn, deleteHypothesisFromList } from "@/app/(app)/hypotheses/actions";
 
 type BadgeColor = "slate" | "emerald" | "amber" | "red" | "sky" | "indigo" | "violet";
 
@@ -35,9 +35,11 @@ export type HypothesisColumnDef = {
 export function HypothesisBoard({
   columns,
   itemsByStatus,
+  canDelete = false,
 }: {
   columns: HypothesisColumnDef[];
   itemsByStatus: Record<string, HypothesisCardData[]>;
+  canDelete?: boolean;
 }) {
   const [board, setBoard] = useState(itemsByStatus);
   const [dragId, setDragId] = useState<string | null>(null);
@@ -49,6 +51,31 @@ export function HypothesisBoard({
       if (board[status].some((i) => i.id === id)) return status;
     }
     return null;
+  }
+
+  // Exclusão direto no card. A confirmação explica o que acontece; se a
+  // hipótese estiver citada numa decisão, o servidor recusa e o motivo aparece.
+  function handleDelete(item: HypothesisCardData) {
+    const ok = window.confirm(
+      `Excluir a hipótese "${item.title}"?\n\n` +
+        `Serão APAGADOS junto: experimentos, oportunidades, testes de usabilidade e simulações dela.\n` +
+        `Continuam existindo: surveys, roteiros de entrevista, personas, evidências e entrevistas (só perdem o vínculo).\n\n` +
+        `Essa ação não pode ser desfeita.`
+    );
+    if (!ok) return;
+    startTransition(() => {
+      deleteHypothesisFromList(item.id).then((res) => {
+        if (!res.ok) {
+          window.alert(res.error ?? "Não foi possível excluir a hipótese.");
+          return;
+        }
+        setBoard((prev) => {
+          const next: Record<string, HypothesisCardData[]> = {};
+          for (const status of Object.keys(prev)) next[status] = prev[status].filter((i) => i.id !== item.id);
+          return next;
+        });
+      });
+    });
   }
 
   function handleDrop(targetStatus: string, targetId: string | null) {
@@ -151,7 +178,7 @@ export function HypothesisBoard({
                       setDragId(null);
                       setDragOverKey(null);
                     }}
-                    className={dragOverKey === key ? "rounded-xl ring-2 ring-indigo-300" : ""}
+                    className={`relative ${dragOverKey === key ? "rounded-xl ring-2 ring-indigo-300" : ""}`}
                   >
                     <Link href={`/hypotheses/${h.id}`} draggable={false}>
                       <Card
@@ -180,6 +207,15 @@ export function HypothesisBoard({
                         <p className="mt-2 text-xs font-medium text-slate-500">Confiança: {h.confidenceScore}</p>
                       </Card>
                     </Link>
+                    {canDelete && (
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(h)}
+                        className="absolute bottom-3 right-4 text-xs font-medium text-red-500 hover:text-red-700 hover:underline"
+                      >
+                        excluir
+                      </button>
+                    )}
                   </div>
                 );
               })}

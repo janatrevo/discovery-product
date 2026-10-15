@@ -1,11 +1,10 @@
 "use server";
 
 import { db } from "@/db";
-import { products } from "@/db/schema";
+import { products, simulationRuns, personas } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { getPageContext } from "@/lib/page-context";
 import { linesToArray } from "@/lib/list-utils";
-import { checkProductDeletable, deleteBlockedMessage } from "@/lib/delete-guards";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
@@ -47,14 +46,24 @@ export async function updateProduct(productId: string, formData: FormData) {
   redirect(`/products/${productId}`);
 }
 
+// Exclui o produto. Simulações dele são apagadas junto; personas só são
+// desvinculadas (continuam existindo, sem produto). Vínculos com hipóteses
+// caem em cascata. Tudo numa transação.
 export async function deleteProduct(productId: string) {
-  const { role } = await getPageContext();
+  const { project, role } = await getPageContext();
   if (role !== "owner" && role !== "editor") throw new Error("Sem permissão para excluir.");
 
-  const reasons = await checkProductDeletable(productId);
-  if (reasons.length > 0) throw new Error(deleteBlockedMessage("este produto", reasons));
+  const [product] = await db.select().from(products).where(eq(products.id, productId)).limit(1);
+  if (!product || product.projectId !== project.id) throw new Error("Produto não encontrado.");
 
-  await db.delete(products).where(eq(products.id, productId));
+  await db.transaction(async (tx) => {
+    await tx.delete(simulationRuns).where(eq(simulationRuns.productId, productId));
+    await tx.update(personas).set({ productId: null }).where(eq(personas.productId, productId));
+    await tx.delete(products).where(eq(products.id, productId));
+  });
+
   revalidatePath("/products");
+  revalidatePath("/personas");
+  revalidatePath("/simulations");
   redirect("/products");
 }

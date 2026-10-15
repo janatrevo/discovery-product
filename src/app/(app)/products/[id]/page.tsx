@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import { getPageContext } from "@/lib/page-context";
 import { Badge, Button, Card, PageHeader } from "@/components/ui/primitives";
 import { deleteProduct } from "../actions";
+import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { deleteSimulation } from "../../simulations/actions";
 import { unlinkProductFromPersona } from "../../personas/actions";
 
@@ -45,7 +46,13 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
         db.select().from(personas).where(eq(personas.productId, id)),
       ])
     : [[], []];
-  const canDeleteNow = canDelete && blockingSimulations.length === 0 && blockingPersonas.length === 0;
+  const canDeleteNow = canDelete;
+  const hasLinked = canDelete && (blockingSimulations.length > 0 || blockingPersonas.length > 0);
+  const confirmMessage =
+    `Excluir o produto "${product.name}"?\n\n` +
+    (blockingSimulations.length ? `Serão APAGADAS junto: ${blockingSimulations.length} simulação(ões) deste produto.\n` : "") +
+    (blockingPersonas.length ? `Serão apenas desvinculadas (continuam existindo): ${blockingPersonas.length} persona(s).\n` : "") +
+    `Hipóteses continuam existindo, só perdem o vínculo com este produto.\n\nEssa ação não pode ser desfeita.`;
 
   return (
     <div className="max-w-3xl">
@@ -60,21 +67,20 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
             </Link>
             {canDeleteNow && (
               <form action={deleteProduct.bind(null, id)}>
-                <Button variant="danger" type="submit">
-                  Excluir
-                </Button>
+                <ConfirmSubmitButton message={confirmMessage}>Excluir</ConfirmSubmitButton>
               </form>
             )}
           </>
         }
       />
-      {canDelete && (blockingSimulations.length > 0 || blockingPersonas.length > 0) && (
+      {hasLinked && (
         <Card className="mb-4 border-amber-300 bg-amber-50">
           <p className="text-sm font-medium text-amber-900">
-            Este produto não pode ser excluído ainda
+            O que acontece se você excluir este produto
           </p>
           <p className="mt-1 text-sm text-amber-800">
-            Desvincule (ou exclua, no caso de simulações) as referências abaixo para liberar a exclusão.
+            As simulações abaixo serão apagadas junto; as personas só perdem o vínculo e continuam existindo.
+            Você também pode tirá-las uma a uma agora.
           </p>
 
           {blockingPersonas.length > 0 && (

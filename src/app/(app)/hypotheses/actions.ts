@@ -1,7 +1,19 @@
 "use server";
 
 import { db } from "@/db";
-import { hypotheses, hypothesisPersonas, hypothesisProducts, hypothesisHistory } from "@/db/schema";
+import {
+  hypotheses,
+  hypothesisPersonas,
+  hypothesisProducts,
+  hypothesisHistory,
+  experiments,
+  opportunities,
+  usabilityTests,
+  usabilityFindings,
+  simulationRuns,
+  surveys,
+  interviewGuides,
+} from "@/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { getPageContext } from "@/lib/page-context";
 import { checkHypothesisDeletable, deleteBlockedMessage } from "@/lib/delete-guards";
@@ -134,16 +146,59 @@ export async function clearOverride(hypothesisId: string) {
   revalidatePath(`/hypotheses/${hypothesisId}`);
 }
 
-export async function deleteHypothesis(hypothesisId: string) {
-  const { role } = await getPageContext();
+// Exclui a hipótese. Só o Decision Log bloqueia (ver checkHypothesisDeletable).
+// Apagados junto: experimentos, oportunidades, testes de usabilidade e
+// simulações dela. Só desvinculados (continuam existindo): surveys, roteiros
+// de entrevista, achados de usabilidade, personas, evidências e entrevistas.
+// Tudo numa transação — se algo falhar, nada é apagado pela metade.
+async function performHypothesisDeletion(hypothesisId: string) {
+  const { project, role } = await getPageContext();
   if (role !== "owner" && role !== "editor") throw new Error("Sem permissão para excluir.");
+
+  const [hyp] = await db.select().from(hypotheses).where(eq(hypotheses.id, hypothesisId)).limit(1);
+  if (!hyp || hyp.projectId !== project.id) throw new Error("Hipótese não encontrada.");
 
   const reasons = await checkHypothesisDeletable(hypothesisId);
   if (reasons.length > 0) throw new Error(deleteBlockedMessage("esta hipótese", reasons));
 
-  await db.delete(hypotheses).where(eq(hypotheses.id, hypothesisId));
+  await db.transaction(async (tx) => {
+    // Apagados junto (os filhos deles caem em cascata pelo banco).
+    await tx.delete(experiments).where(eq(experiments.hypothesisId, hypothesisId));
+    await tx.delete(opportunities).where(eq(opportunities.hypothesisId, hypothesisId));
+    await tx.delete(usabilityTests).where(eq(usabilityTests.hypothesisId, hypothesisId));
+    await tx.delete(simulationRuns).where(eq(simulationRuns.hypothesisId, hypothesisId));
+    // Só desvinculados.
+    await tx.update(surveys).set({ hypothesisId: null }).where(eq(surveys.hypothesisId, hypothesisId));
+    await tx.update(interviewGuides).set({ hypothesisId: null }).where(eq(interviewGuides.hypothesisId, hypothesisId));
+    await tx.update(usabilityFindings).set({ hypothesisId: null }).where(eq(usabilityFindings.hypothesisId, hypothesisId));
+    // Vínculos N:N (pesquisas, evidências, personas, produtos) e histórico
+    // caem em cascata junto com a hipótese.
+    await tx.delete(hypotheses).where(eq(hypotheses.id, hypothesisId));
+  });
+
   revalidatePath("/hypotheses");
+  revalidatePath("/experiments");
+  revalidatePath("/opportunities");
+  revalidatePath("/research/surveys");
+  revalidatePath("/research/interviews");
+}
+
+// Botão "Excluir" da página da hipótese: exclui e volta para a lista.
+export async function deleteHypothesis(hypothesisId: string) {
+  await performHypothesisDeletion(hypothesisId);
   redirect("/hypotheses");
+}
+
+// Botão "excluir" direto no card da lista (board): devolve o resultado em vez
+// de lançar erro, para a tela mostrar o motivo (ex.: hipótese citada numa
+// decisão) sem tela de erro.
+export async function deleteHypothesisFromList(hypothesisId: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await performHypothesisDeletion(hypothesisId);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Não foi possível excluir a hipótese." };
+  }
 }
 
 // Regrava priorityOrder = índice na lista para os ids informados, mas só

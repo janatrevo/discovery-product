@@ -17,7 +17,7 @@ export default async function HypothesesPage({
   searchParams: Promise<{ status?: string }>;
 }) {
   const { status: highlightStatus } = await searchParams;
-  const { project } = await getPageContext();
+  const { project, role } = await getPageContext();
   const [list, productLinks] = await Promise.all([
     db
       .select()
@@ -65,6 +65,7 @@ export default async function HypothesesPage({
         />
       ) : (
         <HypothesisBoard
+          canDelete={role === "owner" || role === "editor"}
           columns={COLUMNS.map((status) => ({
             status,
             label: STATUS_LABELS[status],

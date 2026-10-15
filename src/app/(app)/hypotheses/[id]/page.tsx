@@ -21,6 +21,8 @@ import { getPageContext } from "@/lib/page-context";
 import { Badge, Button, Card, PageHeader } from "@/components/ui/primitives";
 import { STATUS_LABELS, STATUS_COLORS, HYPOTHESIS_TYPES } from "@/lib/hypothesis-types";
 import { deleteHypothesis, overrideStatus, clearOverride } from "../actions";
+import { checkHypothesisDeletable } from "@/lib/delete-guards";
+import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { deleteExperiment } from "../../experiments/actions";
 import { unlinkHypothesisFromOpportunity } from "../../opportunities/actions";
 import { unlinkHypothesisFromSurvey } from "../../research/surveys/actions";
@@ -107,17 +109,28 @@ export default async function HypothesisWorkspacePage({
     ? await db.select().from(hypotheses).where(eq(hypotheses.id, hyp.relatedHypothesisId)).limit(1).then((r) => r[0])
     : null;
 
-  const hasBlockers =
-    canDelete &&
-    (blockingExperiments.length > 0 ||
-      blockingOpportunities.length > 0 ||
-      blockingSurveys.length > 0 ||
-      blockingGuides.length > 0 ||
-      blockingTests.length > 0 ||
-      blockingFindings.length > 0 ||
-      blockingSimulations.length > 0 ||
-      blockingDecisions.length > 0);
+  // O que será apagado junto e o que só será desvinculado ao excluir. A única
+  // coisa que BLOQUEIA é o Decision Log (ver checkHypothesisDeletable).
+  const blockReasons = canDelete ? await checkHypothesisDeletable(id) : [];
+  const hasBlockers = blockReasons.length > 0;
+  const willDelete = [
+    blockingExperiments.length > 0 && `${blockingExperiments.length} experimento(s)`,
+    blockingOpportunities.length > 0 && `${blockingOpportunities.length} oportunidade(s)`,
+    blockingTests.length > 0 && `${blockingTests.length} teste(s) de usabilidade`,
+    blockingSimulations.length > 0 && `${blockingSimulations.length} simulação(ões)`,
+  ].filter(Boolean) as string[];
+  const willUnlink = [
+    blockingSurveys.length > 0 && `${blockingSurveys.length} survey(s)`,
+    blockingGuides.length > 0 && `${blockingGuides.length} roteiro(s) de entrevista`,
+    blockingFindings.length > 0 && `${blockingFindings.length} achado(s) de usabilidade`,
+  ].filter(Boolean) as string[];
+  const hasLinked = canDelete && (willDelete.length > 0 || willUnlink.length > 0 || blockingDecisions.length > 0);
   const canDeleteNow = canDelete && !hasBlockers;
+  const confirmMessage =
+    `Excluir esta hipótese?\n\n` +
+    (willDelete.length ? `Serão APAGADOS junto: ${willDelete.join(", ")}.\n` : "") +
+    (willUnlink.length ? `Serão apenas desvinculados (continuam existindo): ${willUnlink.join(", ")}.\n` : "") +
+    `Personas, evidências e entrevistas continuam existindo.\n\nEssa ação não pode ser desfeita.`;
 
   const typeInfo = HYPOTHESIS_TYPES.find((t) => t.value === hyp.type);
 
@@ -137,9 +150,7 @@ export default async function HypothesisWorkspacePage({
             </Link>
             {canDeleteNow && (
               <form action={deleteHypothesis.bind(null, id)}>
-                <Button variant="danger" type="submit">
-                  Excluir
-                </Button>
+                <ConfirmSubmitButton message={confirmMessage}>Excluir</ConfirmSubmitButton>
               </form>
             )}
           </>
@@ -157,11 +168,21 @@ export default async function HypothesisWorkspacePage({
         </div>
       )}
 
-      {hasBlockers && (
+      {hasLinked && (
         <Card className="mb-4 border-amber-300 bg-amber-50">
-          <p className="text-sm font-medium text-amber-900">Esta hipótese não pode ser excluída ainda</p>
+          <p className="text-sm font-medium text-amber-900">
+            {hasBlockers ? "Esta hipótese não pode ser excluída" : "O que acontece se você excluir esta hipótese"}
+          </p>
           <p className="mt-1 text-sm text-amber-800">
-            Desvincule (ou exclua, no caso de experimentos) as referências abaixo para liberar a exclusão.
+            {hasBlockers ? (
+              <>{blockReasons.join(". ")}.</>
+            ) : (
+              <>
+                {willDelete.length > 0 && <>Serão apagados junto: {willDelete.join(", ")}. </>}
+                {willUnlink.length > 0 && <>Serão apenas desvinculados: {willUnlink.join(", ")}. </>}
+                Personas, evidências e entrevistas continuam existindo. Você pode, se preferir, tirar itens um a um abaixo.
+              </>
+            )}
           </p>
 
           {blockingExperiments.length > 0 && (
@@ -184,7 +205,7 @@ export default async function HypothesisWorkspacePage({
                 ))}
               </div>
               <p className="mt-1 text-xs text-amber-700">
-                Experimentos exigem uma hipótese — não dá pra desvincular, só excluir o experimento inteiro.
+                Experimentos exigem uma hipótese — não dá pra desvincular, só excluir o experimento inteiro (isso acontece junto com a hipótese).
               </p>
             </div>
           )}
