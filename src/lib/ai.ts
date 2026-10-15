@@ -12,7 +12,7 @@
 // apenas as funções exportadas abaixo.
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.6-flash";
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.8-flash";
 
 export function isAiEnabled() {
   return Boolean(GEMINI_API_KEY);
@@ -20,10 +20,16 @@ export function isAiEnabled() {
 
 type GeminiPart = { text: string } | { inlineData: { mimeType: string; data: string } };
 
-// Modelo reserva, usado quando o principal está sobrecarregado (erro 503/429).
-// Pode ser trocado pela variável GEMINI_FALLBACK_MODEL; vazio desliga o reserva.
-const GEMINI_FALLBACK_MODEL =
-  process.env.GEMINI_FALLBACK_MODEL !== undefined ? process.env.GEMINI_FALLBACK_MODEL : "gemini-2.5-flash";
+// Modelos reserva, usados quando o principal está sobrecarregado (503/429) ou
+// foi aposentado (404). Variável GEMINI_FALLBACK_MODELS (separados por vírgula)
+// troca a lista; vazia desliga os reservas. (O gemini-2.5-flash já não está
+// disponível para chaves novas — por isso não está na lista padrão.)
+const GEMINI_FALLBACK_MODELS = (
+  process.env.GEMINI_FALLBACK_MODELS !== undefined ? process.env.GEMINI_FALLBACK_MODELS : "gemini-3.8-flash,gemini-3.6-flash"
+)
+  .split(",")
+  .map((m) => m.trim())
+  .filter(Boolean);
 
 // Erros "tente de novo": o Google devolve 503 quando o modelo está com muita
 // procura (costuma passar em segundos), 429 quando passa do limite e 500/502/504
@@ -85,29 +91,39 @@ async function callGeminiDetailed(opts: {
   maxTokens?: number;
   jsonMode?: boolean;
 }): Promise<{ text: string; model: string }> {
+  // Principal: 2 tentativas. Cada reserva (sem repetir o principal): 1 tentativa.
   const plan: { model: string; waitBefore: number }[] = [
     { model: GEMINI_MODEL, waitBefore: 0 },
     { model: GEMINI_MODEL, waitBefore: 2500 },
   ];
-  if (GEMINI_FALLBACK_MODEL && GEMINI_FALLBACK_MODEL !== GEMINI_MODEL) {
-    plan.push({ model: GEMINI_FALLBACK_MODEL, waitBefore: 1500 });
-    plan.push({ model: GEMINI_FALLBACK_MODEL, waitBefore: 4000 });
+  for (const m of GEMINI_FALLBACK_MODELS) {
+    if (m !== GEMINI_MODEL) plan.push({ model: m, waitBefore: 1500 });
   }
 
+  let overloadError: unknown; // 503/429...: o motivo mais útil para mostrar se tudo falhar
   let lastError: unknown;
+  const deadModels = new Set<string>(); // modelos que responderam 404 (aposentados/inexistentes)
   for (const step of plan) {
+    if (deadModels.has(step.model)) continue;
     if (step.waitBefore) await sleep(step.waitBefore);
     try {
       const text = await callGeminiOnce(step.model, opts);
       return { text, model: step.model };
     } catch (err) {
       lastError = err;
-      const retryable = err instanceof GeminiHttpError && RETRYABLE_STATUS.has(err.status);
-      if (!retryable) throw err;
-      console.warn(`Gemini (${step.model}) indisponível (HTTP ${(err as GeminiHttpError).status}), tentando de novo...`);
+      if (!(err instanceof GeminiHttpError)) throw err;
+      if (err.status === 404) {
+        // Modelo não existe mais para esta chave: pula para o próximo, sem insistir.
+        deadModels.add(step.model);
+        console.warn(`Gemini: modelo ${step.model} indisponível (404), tentando o próximo.`);
+        continue;
+      }
+      if (!RETRYABLE_STATUS.has(err.status)) throw err;
+      overloadError = err;
+      console.warn(`Gemini (${step.model}) indisponível (HTTP ${err.status}), tentando de novo...`);
     }
   }
-  throw lastError;
+  throw overloadError ?? lastError;
 }
 
 async function callGemini(opts: {
