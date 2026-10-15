@@ -609,6 +609,25 @@ export const experimentInterviewGuides = pgTable(
   (t) => [primaryKey({ columns: [t.experimentId, t.guideId] })]
 );
 
+// ---------- Análise por IA das pesquisas de uma hipótese ----------
+// Guarda cada análise "Analisar com IA" (ver analyzeHypothesisWithAi em
+// src/app/(app)/hypotheses/analysis-actions.ts). É só uma SUGESTÃO para a
+// pessoa: não é evidência e não entra no cálculo de confiança. A pessoa
+// decide registrando a evidência na pesquisa correspondente.
+export const hypothesisAiAnalyses = pgTable("hypothesis_ai_analyses", {
+  id: id(),
+  hypothesisId: uuid("hypothesis_id")
+    .references(() => hypotheses.id, { onDelete: "cascade" })
+    .notNull(),
+  verdict: varchar("verdict", { length: 20 }).notNull(), // favoravel | contraria | mista | insuficiente
+  result: jsonb("result").notNull(),
+  // Fontes lidas (surveys/entrevistas) com o link de cada uma.
+  sources: jsonb("sources").notNull(),
+  modelVersion: varchar("model_version", { length: 120 }).notNull(),
+  createdBy: uuid("created_by").references(() => users.id),
+  createdAt: createdAt(),
+});
+
 export const codes = pgTable("codes", {
   id: id(),
   projectId: uuid("project_id")

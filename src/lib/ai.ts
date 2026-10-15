@@ -417,3 +417,140 @@ const METHOD_RULES: Record<string, { method: string; why: string }[]> = {
 export function recommendExperimentMethods(hypothesisType: string) {
   return METHOD_RULES[hypothesisType] ?? [{ method: "interview", why: "Método padrão de exploração inicial." }];
 }
+
+
+// ---------- Análise das pesquisas de uma hipótese (favorável ou não) ----------
+// Lê as respostas dos surveys e as transcrições das entrevistas vinculadas a
+// uma hipótese e sugere se o conjunto parece favorável, contrário, misto ou
+// insuficiente. NÃO usa modo mock: um veredito inventado seria pior que
+// nenhum — sem GEMINI_API_KEY a função recusa com uma mensagem clara. O
+// resultado é sempre uma sugestão (ai_generated); quem decide é a pessoa.
+export type AnalysisVerdict = "favoravel" | "contraria" | "mista" | "insuficiente";
+export type SourceVerdict = AnalysisVerdict | "irrelevante";
+
+export type HypothesisAnalysisInput = {
+  hypothesis: {
+    title: string;
+    description?: string | null;
+    type: string;
+    problemRef?: string | null;
+    solutionRef?: string | null;
+  };
+  // Contexto dos roteiros de entrevista (objetivo, cenário, JTBD, perguntas).
+  context: string;
+  sources: { kind: "survey" | "interview"; id: string; label: string; content: string }[];
+};
+
+type Finding = { source: string; finding: string; quote?: string };
+
+export type HypothesisAnalysis = {
+  verdict: AnalysisVerdict;
+  verdictConfidence: "baixa" | "media" | "alta";
+  summary: string;
+  qualitative: { verdict: AnalysisVerdict; summary: string } | null;
+  quantitative: { verdict: AnalysisVerdict; summary: string } | null;
+  supporting: Finding[];
+  contradicting: Finding[];
+  gaps: string[];
+  caveats: string[];
+  perSource: { kind: "survey" | "interview"; id: string; label: string; verdict: SourceVerdict; reason: string }[];
+};
+
+const VERDICTS = ["favoravel", "contraria", "mista", "insuficiente"];
+const SOURCE_VERDICTS = [...VERDICTS, "irrelevante"];
+
+function asVerdict(v: unknown, fallback: AnalysisVerdict = "insuficiente"): AnalysisVerdict {
+  return typeof v === "string" && VERDICTS.includes(v) ? (v as AnalysisVerdict) : fallback;
+}
+function asStrings(v: unknown): string[] {
+  return Array.isArray(v) ? v.map((x) => String(x ?? "").trim()).filter(Boolean) : [];
+}
+function asFindings(v: unknown): Finding[] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .map((x) => {
+      const o = (x ?? {}) as Record<string, unknown>;
+      return {
+        source: String(o.source ?? "").trim(),
+        finding: String(o.finding ?? "").trim(),
+        quote: o.quote ? String(o.quote).trim() : undefined,
+      };
+    })
+    .filter((f) => f.finding);
+}
+function asBlock(v: unknown): { verdict: AnalysisVerdict; summary: string } | null {
+  if (!v || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>;
+  const summary = String(o.summary ?? "").trim();
+  return summary ? { verdict: asVerdict(o.verdict), summary } : null;
+}
+
+export async function analyzeHypothesisResearch(input: HypothesisAnalysisInput) {
+  if (!isAiEnabled()) {
+    throw new Error(
+      "A IA não está configurada neste ambiente (falta a variável GEMINI_API_KEY na Vercel). Sem ela não é possível analisar."
+    );
+  }
+
+  const h = input.hypothesis;
+  const sourcesText = input.sources
+    .map((s) => `=== FONTE id=${s.id} tipo=${s.kind === "survey" ? "survey (quantitativa)" : "entrevista (qualitativa)"} nome="${s.label}" ===\n${s.content}`)
+    .join("\n\n");
+
+  const prompt =
+    `HIPÓTESE (tipo: ${h.type}):\n${h.title}\n` +
+    (h.description ? `Descrição: ${h.description}\n` : "") +
+    (h.problemRef ? `Problema de referência: ${h.problemRef}\n` : "") +
+    (h.solutionRef ? `Solução de referência: ${h.solutionRef}\n` : "") +
+    (input.context ? `\nROTEIROS DE ENTREVISTA VINCULADOS:\n${input.context}\n` : "") +
+    `\nFONTES DE PESQUISA:\n${sourcesText}`;
+
+  const system =
+    "Você é um analista de pesquisa de produto rigoroso e imparcial. Sua tarefa: ler as pesquisas (respostas de surveys e transcrições de entrevistas) ligadas a UMA hipótese e dizer se o conjunto parece FAVORÁVEL ou CONTRÁRIO a ela. " +
+    "Regras: (1) Não tenha viés de confirmação — procure ativamente o que contradiz a hipótese. (2) Baseie-se SOMENTE no texto fornecido; nunca invente dados, números ou falas. Citações em 'quote' devem ser trechos curtos copiados literalmente das fontes. (3) Em entrevistas, dê mais peso ao que o participante relata como comportamento real do que a opiniões educadas ou a respostas a perguntas indutivas feitas pelo entrevistador. (4) Em surveys, considere o tamanho da amostra e perguntas indutivas; poucas respostas = cautela. (5) Se houver pouco dado ou fontes sem relação clara com a hipótese, use veredito 'insuficiente' ou 'irrelevante' — isso é uma resposta válida e honesta. (6) Use 'mista' quando houver evidência relevante nos dois sentidos. " +
+    "Não existe 'validada' nem 'invalidada' aqui: você apenas sugere a direção das evidências; a decisão é de um humano. Escreva em português do Brasil. " +
+    'Responda APENAS com um objeto JSON: {"verdict":"favoravel|contraria|mista|insuficiente","verdictConfidence":"baixa|media|alta","summary":string (3 a 5 frases explicando o veredito),"qualitative":{"verdict":...,"summary":string}|null,"quantitative":{"verdict":...,"summary":string}|null,"supporting":[{"source":string,"finding":string,"quote":string opcional}],"contradicting":[{"source":string,"finding":string,"quote":string opcional}],"gaps":[string] (o que falta descobrir),"caveats":[string] (vieses, amostra pequena, perguntas indutivas, transcrição automática com erros),"perSource":[{"id":string (o id exato da fonte),"verdict":"favoravel|contraria|mista|insuficiente|irrelevante","reason":string (1 a 2 frases)}]}. ' +
+    'Use "qualitative" ou "quantitative" = null quando não houver fontes daquele tipo. "source" nos achados é o nome da fonte.';
+
+  const text = await callGemini({
+    system,
+    parts: [{ text: prompt }],
+    maxTokens: 12000,
+    jsonMode: true,
+  });
+  const raw = parseJsonResponse<Record<string, unknown>>(text);
+
+  const byId = new Map(input.sources.map((s) => [s.id, s]));
+  const perSource: HypothesisAnalysis["perSource"] = [];
+  if (Array.isArray(raw.perSource)) {
+    for (const item of raw.perSource) {
+      const o = (item ?? {}) as Record<string, unknown>;
+      const src = byId.get(String(o.id ?? ""));
+      if (!src) continue; // ignora ids inventados
+      const v = String(o.verdict ?? "");
+      perSource.push({
+        kind: src.kind,
+        id: src.id,
+        label: src.label,
+        verdict: SOURCE_VERDICTS.includes(v) ? (v as SourceVerdict) : "insuficiente",
+        reason: String(o.reason ?? "").trim(),
+      });
+    }
+  }
+
+  const conf = String(raw.verdictConfidence ?? "");
+  const data: HypothesisAnalysis = {
+    verdict: asVerdict(raw.verdict),
+    verdictConfidence: conf === "alta" || conf === "media" ? conf : "baixa",
+    summary: String(raw.summary ?? "").trim(),
+    qualitative: asBlock(raw.qualitative),
+    quantitative: asBlock(raw.quantitative),
+    supporting: asFindings(raw.supporting),
+    contradicting: asFindings(raw.contradicting),
+    gaps: asStrings(raw.gaps),
+    caveats: asStrings(raw.caveats),
+    perSource,
+  };
+  if (!data.summary) throw new Error("A IA devolveu uma resposta sem resumo. Tente de novo.");
+  return { data, modelVersion: GEMINI_MODEL };
+}

@@ -34,7 +34,11 @@ import { ConfidenceReceiptCard } from "@/components/hypothesis-tabs/confidence-r
 import { ExperimentsMiniList } from "@/components/hypothesis-tabs/experiments-mini";
 import { SimulationsMiniList } from "@/components/hypothesis-tabs/simulations-mini";
 import { ResearchMiniList } from "@/components/hypothesis-tabs/research-mini";
+import { HypothesisAiAnalysisCard } from "@/components/hypothesis-tabs/ai-analysis-card";
 import { surveysForHypothesis, guidesForHypothesis } from "@/lib/research-links";
+
+// A análise por IA lê todas as pesquisas e pode levar quase um minuto.
+export const maxDuration = 60;
 
 const TABS = [
   { key: "overview", label: "Overview" },
@@ -484,7 +488,12 @@ export default async function HypothesisWorkspacePage({
 
       {tab === "evidence" && <EvidenceTab hypothesisId={id} projectId={project.id} role={role} />}
 
-      {tab === "research" && <ResearchMiniList hypothesisId={id} projectId={project.id} role={role} />}
+      {tab === "research" && (
+        <>
+          <HypothesisAiAnalysisCard hypothesisId={id} canEdit={role !== "viewer"} />
+          <ResearchMiniList hypothesisId={id} projectId={project.id} role={role} />
+        </>
+      )}
 
       {tab === "experiments" && <ExperimentsMiniList hypothesisId={id} projectId={project.id} />}
 
