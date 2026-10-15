@@ -20,13 +20,29 @@ export function isAiEnabled() {
 
 type GeminiPart = { text: string } | { inlineData: { mimeType: string; data: string } };
 
-async function callGemini(opts: {
-  system: string;
-  parts: GeminiPart[];
-  maxTokens?: number;
-  jsonMode?: boolean;
-}): Promise<string> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+// Modelo reserva, usado quando o principal está sobrecarregado (erro 503/429).
+// Pode ser trocado pela variável GEMINI_FALLBACK_MODEL; vazio desliga o reserva.
+const GEMINI_FALLBACK_MODEL =
+  process.env.GEMINI_FALLBACK_MODEL !== undefined ? process.env.GEMINI_FALLBACK_MODEL : "gemini-2.5-flash";
+
+// Erros "tente de novo": o Google devolve 503 quando o modelo está com muita
+// procura (costuma passar em segundos), 429 quando passa do limite e 500/502/504
+// em falhas momentâneas.
+const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
+
+class GeminiHttpError extends Error {
+  constructor(public status: number, body: string) {
+    super(`Gemini API HTTP ${status}: ${body.slice(0, 300)}`);
+  }
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function callGeminiOnce(
+  model: string,
+  opts: { system: string; parts: GeminiPart[]; maxTokens?: number; jsonMode?: boolean }
+): Promise<string> {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -45,7 +61,7 @@ async function callGemini(opts: {
   });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new Error(`Gemini API HTTP ${res.status}: ${body.slice(0, 300)}`);
+    throw new GeminiHttpError(res.status, body);
   }
   const data = await res.json();
   const text =
@@ -57,6 +73,50 @@ async function callGemini(opts: {
       .join("") ?? "";
   if (!text) throw new Error("Resposta vazia da Gemini API.");
   return text;
+}
+
+// Chama a Gemini com tentativas: modelo principal (2x, com pausa curta) e, se
+// continuar sobrecarregado, o modelo reserva. Só repete em erros temporários
+// (ver RETRYABLE_STATUS); qualquer outro erro (chave inválida, pedido
+// malformado) falha na hora. Devolve também qual modelo respondeu.
+async function callGeminiDetailed(opts: {
+  system: string;
+  parts: GeminiPart[];
+  maxTokens?: number;
+  jsonMode?: boolean;
+}): Promise<{ text: string; model: string }> {
+  const plan: { model: string; waitBefore: number }[] = [
+    { model: GEMINI_MODEL, waitBefore: 0 },
+    { model: GEMINI_MODEL, waitBefore: 2500 },
+  ];
+  if (GEMINI_FALLBACK_MODEL && GEMINI_FALLBACK_MODEL !== GEMINI_MODEL) {
+    plan.push({ model: GEMINI_FALLBACK_MODEL, waitBefore: 1500 });
+    plan.push({ model: GEMINI_FALLBACK_MODEL, waitBefore: 4000 });
+  }
+
+  let lastError: unknown;
+  for (const step of plan) {
+    if (step.waitBefore) await sleep(step.waitBefore);
+    try {
+      const text = await callGeminiOnce(step.model, opts);
+      return { text, model: step.model };
+    } catch (err) {
+      lastError = err;
+      const retryable = err instanceof GeminiHttpError && RETRYABLE_STATUS.has(err.status);
+      if (!retryable) throw err;
+      console.warn(`Gemini (${step.model}) indisponível (HTTP ${(err as GeminiHttpError).status}), tentando de novo...`);
+    }
+  }
+  throw lastError;
+}
+
+async function callGemini(opts: {
+  system: string;
+  parts: GeminiPart[];
+  maxTokens?: number;
+  jsonMode?: boolean;
+}): Promise<string> {
+  return (await callGeminiDetailed(opts)).text;
 }
 
 // Extrai o primeiro objeto/array JSON balanceado da resposta do modelo.
@@ -512,7 +572,7 @@ export async function analyzeHypothesisResearch(input: HypothesisAnalysisInput) 
     'Responda APENAS com um objeto JSON: {"verdict":"favoravel|contraria|mista|insuficiente","verdictConfidence":"baixa|media|alta","summary":string (3 a 5 frases explicando o veredito),"qualitative":{"verdict":...,"summary":string}|null,"quantitative":{"verdict":...,"summary":string}|null,"supporting":[{"source":string,"finding":string,"quote":string opcional}],"contradicting":[{"source":string,"finding":string,"quote":string opcional}],"gaps":[string] (o que falta descobrir),"caveats":[string] (vieses, amostra pequena, perguntas indutivas, transcrição automática com erros),"perSource":[{"id":string (o id exato da fonte),"verdict":"favoravel|contraria|mista|insuficiente|irrelevante","reason":string (1 a 2 frases)}]}. ' +
     'Use "qualitative" ou "quantitative" = null quando não houver fontes daquele tipo. "source" nos achados é o nome da fonte.';
 
-  const text = await callGemini({
+  const { text, model } = await callGeminiDetailed({
     system,
     parts: [{ text: prompt }],
     maxTokens: 12000,
@@ -552,5 +612,5 @@ export async function analyzeHypothesisResearch(input: HypothesisAnalysisInput) 
     perSource,
   };
   if (!data.summary) throw new Error("A IA devolveu uma resposta sem resumo. Tente de novo.");
-  return { data, modelVersion: GEMINI_MODEL };
+  return { data, modelVersion: model };
 }

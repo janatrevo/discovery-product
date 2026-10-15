@@ -47,6 +47,15 @@ export async function analyzeHypothesisWithAi(hypothesisId: string): Promise<{ o
     return { ok: true };
   } catch (err) {
     console.error("Erro ao analisar hipótese com IA:", err);
-    return { ok: false, error: err instanceof Error ? err.message : "Não foi possível analisar agora." };
+    const message = err instanceof Error ? err.message : "";
+    // Erros temporários do Google viram uma mensagem em português, sem o JSON cru.
+    if (/HTTP (429|500|502|503|504)/.test(message)) {
+      return {
+        ok: false,
+        error:
+          "A IA do Google está sobrecarregada neste momento (o app já tentou várias vezes, inclusive com um modelo reserva). Aguarde cerca de um minuto e clique em analisar de novo.",
+      };
+    }
+    return { ok: false, error: message || "Não foi possível analisar agora." };
   }
 }
