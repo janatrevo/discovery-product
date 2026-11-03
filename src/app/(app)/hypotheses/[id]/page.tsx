@@ -36,6 +36,8 @@ import { SimulationsMiniList } from "@/components/hypothesis-tabs/simulations-mi
 import { ResearchMiniList } from "@/components/hypothesis-tabs/research-mini";
 import { HypothesisAiAnalysisCard } from "@/components/hypothesis-tabs/ai-analysis-card";
 import { surveysForHypothesis, guidesForHypothesis } from "@/lib/research-links";
+import { groupOpportunitiesByPhase } from "@/lib/opportunity-order";
+import { RoadmapCard } from "@/components/hypothesis-tabs/roadmap-card";
 
 // A análise por IA lê todas as pesquisas e pode levar quase um minuto.
 export const maxDuration = 60;
@@ -177,20 +179,29 @@ export default async function HypothesisWorkspacePage({
 
       {hasLinked && (
         <Card className="mb-4 border-amber-300 bg-amber-50">
-          <p className="text-sm font-medium text-amber-900">
-            {hasBlockers ? "Esta hipótese não pode ser excluída" : "O que acontece se você excluir esta hipótese"}
-          </p>
-          <p className="mt-1 text-sm text-amber-800">
+          <details open={hasBlockers}>
+            <summary className="cursor-pointer list-none">
+              <span className="flex items-start justify-between gap-3">
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium text-amber-900">
+                    {hasBlockers ? "Esta hipótese não pode ser excluída" : "O que acontece se você excluir esta hipótese"}
+                  </span>
+                  <span className="mt-1 block text-sm text-amber-800">
             {hasBlockers ? (
               <>{blockReasons.join(". ")}.</>
             ) : (
               <>
                 {willDelete.length > 0 && <>Serão apagados junto: {willDelete.join(", ")}. </>}
                 {willUnlink.length > 0 && <>Serão apenas desvinculados: {willUnlink.join(", ")}. </>}
-                Personas, evidências e entrevistas continuam existindo. Você pode, se preferir, tirar itens um a um abaixo.
+                Personas, evidências e entrevistas continuam existindo. Você pode, se preferir, tirar itens um a um (veja os detalhes).
               </>
             )}
-          </p>
+                  </span>
+                </span>
+                <span className="shrink-0 text-xs font-medium text-amber-800 underline">Ver detalhes e desvincular itens</span>
+              </span>
+            </summary>
+            <div className="mt-2">
 
           {blockingExperiments.length > 0 && (
             <div className="mt-3">
@@ -222,20 +233,27 @@ export default async function HypothesisWorkspacePage({
               <p className="text-xs font-semibold uppercase text-amber-700">
                 Oportunidades ({blockingOpportunities.length})
               </p>
-              <div className="mt-1 space-y-2">
-                {blockingOpportunities.map((o) => (
-                  <div key={o.id} className="flex items-center justify-between gap-2 rounded-md border border-amber-200 bg-white px-3 py-2">
-                    <Link href={`/opportunities/${o.id}`} className="min-w-0 flex-1">
-                      <p className="truncate text-sm text-slate-800">{o.title}</p>
-                    </Link>
-                    <form action={unlinkHypothesisFromOpportunity.bind(null, o.id, id)}>
-                      <Button type="submit" variant="ghost" size="sm">
-                        desvincular
-                      </Button>
-                    </form>
+              {groupOpportunitiesByPhase(blockingOpportunities).map((g) => (
+                <div key={g.label} className="mt-2">
+                  <p className="text-xs font-medium text-amber-800">
+                    {g.label} · {g.items.length}
+                  </p>
+                  <div className="mt-1 space-y-2">
+                    {g.items.map((o) => (
+                      <div key={o.id} className="flex items-center justify-between gap-2 rounded-md border border-amber-200 bg-white px-3 py-2">
+                        <Link href={`/opportunities/${o.id}`} className="min-w-0 flex-1">
+                          <p className="truncate text-sm text-slate-800">{o.title}</p>
+                        </Link>
+                        <form action={unlinkHypothesisFromOpportunity.bind(null, o.id, id)}>
+                          <Button type="submit" variant="ghost" size="sm">
+                            desvincular
+                          </Button>
+                        </form>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                </div>
+              ))}
             </div>
           )}
 
@@ -371,6 +389,8 @@ export default async function HypothesisWorkspacePage({
               </p>
             </div>
           )}
+            </div>
+          </details>
         </Card>
       )}
 
@@ -401,6 +421,8 @@ export default async function HypothesisWorkspacePage({
           )}
 
           <ConfidenceReceiptCard hypothesis={hyp} />
+
+          <RoadmapCard hypothesisId={id} />
 
           {(hyp.problemRef || hyp.solutionRef || relatedHyp) && (
             <Card className="space-y-2">

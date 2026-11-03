@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { opportunities, personas, hypotheses } from "@/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { Badge, Button, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
+import { compareByPhaseThenTitle } from "@/lib/opportunity-order";
 
 const COLUMNS: { value: string; label: string }[] = [
   { value: "new", label: "Novas" },
@@ -13,8 +14,10 @@ const COLUMNS: { value: string; label: string }[] = [
   { value: "archived", label: "Arquivadas" },
 ];
 
-export default async function OpportunitiesPage() {
+export default async function OpportunitiesPage({ searchParams }: { searchParams: Promise<{ ordem?: string }> }) {
   const { project } = await getPageContext();
+  const { ordem = "fase" } = await searchParams;
+  const byScore = ordem === "score";
 
   const [list, personaList, hypothesisList] = await Promise.all([
     db
@@ -26,6 +29,9 @@ export default async function OpportunitiesPage() {
     db.select().from(hypotheses).where(eq(hypotheses.projectId, project.id)),
   ]);
 
+  // "fase": por fase ([Fase N] no título) e depois alfabética; "score": maior prioridade primeiro.
+  const ordered = byScore ? list : [...list].sort(compareByPhaseThenTitle);
+
   const personaName = (id: string | null) => personaList.find((p) => p.id === id)?.name;
   const hypothesisTitle = (id: string | null) => hypothesisList.find((h) => h.id === id)?.title;
 
@@ -35,9 +41,26 @@ export default async function OpportunitiesPage() {
         title="Discovery Board"
         description="Mapa de oportunidades priorizado por impacto, frequência, severidade, potencial de negócio, facilidade de solução — ponderado pela confiança de evidência real por trás."
         actions={
-          <Link href="/opportunities/new">
-            <Button>+ Nova oportunidade</Button>
-          </Link>
+          <>
+            <div className="flex items-center gap-1 text-xs text-slate-500">
+              <span>Ordenar:</span>
+              <Link
+                href="/opportunities?ordem=fase"
+                className={byScore ? "rounded px-2 py-1 hover:bg-slate-100" : "rounded bg-slate-200 px-2 py-1 font-medium text-slate-800"}
+              >
+                Fase e nome
+              </Link>
+              <Link
+                href="/opportunities?ordem=score"
+                className={byScore ? "rounded bg-slate-200 px-2 py-1 font-medium text-slate-800" : "rounded px-2 py-1 hover:bg-slate-100"}
+              >
+                Prioridade
+              </Link>
+            </div>
+            <Link href="/opportunities/new">
+              <Button>+ Nova oportunidade</Button>
+            </Link>
+          </>
         }
       />
 
@@ -54,7 +77,7 @@ export default async function OpportunitiesPage() {
       ) : (
         <div className="flex gap-4 overflow-x-auto pb-4">
           {COLUMNS.map((col) => {
-            const items = list.filter((o) => o.status === col.value);
+            const items = ordered.filter((o) => o.status === col.value);
             return (
               <div key={col.value} className="w-72 shrink-0 rounded-xl bg-slate-100/60 p-2">
                 <div className="mb-2 flex items-center justify-between px-1">
