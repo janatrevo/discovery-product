@@ -21,6 +21,7 @@ import {
   recordResult,
   linkResearchToExperiment,
   unlinkResearchFromExperiment,
+  saveObservationSynthesis,
 } from "../actions";
 
 export default async function ExperimentDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -96,7 +97,7 @@ export default async function ExperimentDetailPage({ params }: { params: Promise
       />
 
       <Card className="space-y-2 text-sm text-slate-700">
-        {exp.objective && <p><strong>Objetivo:</strong> {exp.objective}</p>}
+        {exp.objective && <p><strong>{isFieldObservation ? "O que queremos entender" : "Objetivo"}:</strong> {exp.objective}</p>}
         {exp.variable && <p><strong>Variável:</strong> {exp.variable}</p>}
         {exp.metric && <p><strong>Métrica:</strong> {exp.metric}</p>}
         {exp.samplePlanned && <p><strong>Amostra planejada:</strong> {exp.samplePlanned}</p>}
@@ -238,7 +239,31 @@ export default async function ExperimentDetailPage({ params }: { params: Promise
         </Card>
       )}
 
-      {!exp.successCriteriaLockedAt ? (
+      {isFieldObservation && (
+        <Card>
+          <p className="mb-1 text-sm font-semibold text-slate-700">Síntese do que aprendemos</p>
+          <p className="mb-2 text-xs text-slate-500">
+            Opcional. Resuma o dia a dia observado, os sistemas e os pontos de dor. Pode ir editando conforme novos
+            registros entram.
+          </p>
+          {canEdit ? (
+            <form action={saveObservationSynthesis.bind(null, id)} className="space-y-2">
+              <Textarea name="synthesis" rows={6} defaultValue={exp.resultObserved ?? ""} />
+              <label className="flex items-center gap-2 text-sm text-slate-600">
+                <input type="checkbox" name="done" value="true" defaultChecked={exp.status === "completed"} /> Marcar
+                observação como concluída
+              </label>
+              <Button type="submit" variant="secondary">
+                Salvar síntese
+              </Button>
+            </form>
+          ) : (
+            <p className="whitespace-pre-wrap text-sm text-slate-700">{exp.resultObserved || "—"}</p>
+          )}
+        </Card>
+      )}
+
+      {isFieldObservation ? null : !exp.successCriteriaLockedAt ? (
         canEdit && (
           <Card>
             <p className="mb-2 text-sm font-semibold text-slate-700">
@@ -262,7 +287,7 @@ export default async function ExperimentDetailPage({ params }: { params: Promise
         </Card>
       )}
 
-      {exp.successCriteriaLockedAt && !exp.resultRecordedAt && canEdit && (
+      {!isFieldObservation && exp.successCriteriaLockedAt && !exp.resultRecordedAt && canEdit && (
         <Card>
           <p className="mb-2 text-sm font-semibold text-slate-700">Registrar resultado</p>
           <form action={recordResult.bind(null, id)} className="space-y-2">
@@ -298,7 +323,7 @@ export default async function ExperimentDetailPage({ params }: { params: Promise
         </Card>
       )}
 
-      {exp.resultRecordedAt && (
+      {!isFieldObservation && exp.resultRecordedAt && (
         <Card>
           <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Resultado (registrado em {new Date(exp.resultRecordedAt).toLocaleString("pt-BR")})</p>
           <p className="text-sm text-slate-700">{exp.resultObserved}</p>

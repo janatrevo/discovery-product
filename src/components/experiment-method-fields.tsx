@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Field, Input, Label, Select, Textarea } from "@/components/ui/primitives";
+import { FieldObservationFields } from "@/components/field-observation-form";
 
 // Sugestões que cada pesquisa existente "empresta" ao experimento. São
 // calculadas no servidor (ver experiments/new/page.tsx) a partir do que a
@@ -255,6 +256,32 @@ export function ExperimentMethodFields({
         </div>
       )}
 
+      {method === "field_observation" ? (
+        <>
+        <Field>
+          <Label>O que queremos entender</Label>
+          <Textarea
+            name="objective"
+            rows={3}
+            value={values.objective}
+            onChange={(e) => edit("objective", e.target.value)}
+            placeholder="Ex.: Como é o dia a dia do laboratório hoje e quais sistemas e passos manuais a equipe usa"
+          />
+          <p className="mt-1 text-xs text-slate-500">
+            Sem métrica, variável ou amostra: o registro é tudo o que for colhido (gravações, transcrições e anotações).
+          </p>
+        </Field>
+        <div className="mb-3 rounded-md border border-slate-200 bg-slate-50 p-3">
+          <p className="text-xs font-medium text-slate-700">Primeiro registro (opcional)</p>
+          <p className="mb-2 text-xs text-slate-500">
+            Preencha agora se já tiver a primeira conversa: pessoa, cargo, laboratório, gravação, transcrição ou
+            anotações. Você pode deixar em branco e adicionar os registros depois, dentro do experimento.
+          </p>
+          <FieldObservationFields titleRequired={false} />
+        </div>
+        </>
+      ) : (
+        <>
       <Field>
         <Label>Objetivo{isAuto("objective") ? " · sugerido pela pesquisa" : ""}</Label>
         <Textarea
@@ -301,6 +328,8 @@ export function ExperimentMethodFields({
           onChange={(e) => edit("resultExpected", e.target.value)}
         />
       </Field>
+        </>
+      )}
     </>
   );
 }

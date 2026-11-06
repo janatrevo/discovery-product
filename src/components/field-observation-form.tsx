@@ -24,22 +24,27 @@ function dateInputValue(d: Date | null | undefined) {
 // Formulário único para criar e editar um registro de observação em campo.
 // Gravação e transcrição são opcionais: dá para registrar só com anotações
 // (quando não foi possível gravar).
-export function FieldObservationForm({
-  action,
+export function FieldObservationFields({
   values = {},
-  submitLabel,
   defaultSite,
+  titleRequired = true,
 }: {
-  action: (formData: FormData) => Promise<void>;
   values?: ObservationFormValues;
-  submitLabel: string;
   defaultSite?: string;
+  titleRequired?: boolean;
 }) {
   return (
-    <form action={action} className="space-y-1">
+    <>
       <Field>
-        <Label>Título do registro *</Label>
-        <Input name="title" required defaultValue={values.title ?? ""} placeholder="Ex.: Gerente do call center — Ângela" />
+        <Label>{titleRequired ? "Título do registro *" : "Título do registro"}</Label>
+        <Input
+          name="title"
+          required={titleRequired}
+          defaultValue={values.title ?? ""}
+          placeholder={
+            titleRequired ? "Ex.: Gerente do call center — Ângela" : "Opcional — se vazio, usa pessoa — cargo — laboratório"
+          }
+        />
       </Field>
       <div className="grid grid-cols-1 gap-x-3 sm:grid-cols-2">
         <Field>
@@ -96,6 +101,24 @@ export function FieldObservationForm({
           (renomeações feitas na tela serão substituídas pelo que estiver aqui).
         </p>
       </Field>
+    </>
+  );
+}
+
+export function FieldObservationForm({
+  action,
+  values = {},
+  submitLabel,
+  defaultSite,
+}: {
+  action: (formData: FormData) => Promise<void>;
+  values?: ObservationFormValues;
+  submitLabel: string;
+  defaultSite?: string;
+}) {
+  return (
+    <form action={action} className="space-y-1">
+      <FieldObservationFields values={values} defaultSite={defaultSite} />
       <Button type="submit">{submitLabel}</Button>
     </form>
   );

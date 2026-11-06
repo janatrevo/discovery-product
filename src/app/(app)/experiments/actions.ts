@@ -3,6 +3,7 @@
 import { db } from "@/db";
 import {
   experiments,
+  fieldObservations,
   evidence,
   hypothesisEvidence,
   surveys,
@@ -14,6 +15,7 @@ import {
 } from "@/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { getPageContext } from "@/lib/page-context";
+import { observationFromForm } from "@/lib/field-observation-input";
 import { recomputeHypothesis } from "@/lib/recompute-hypothesis";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
@@ -101,23 +103,44 @@ export async function createExperiment(hypothesisId: string, formData: FormData)
   const surveyIds = method === "survey" ? formData.getAll("surveyIds").map(String).filter(Boolean) : [];
   const guideIds = method === "interview" ? formData.getAll("guideIds").map(String).filter(Boolean) : [];
 
+  // Observação em campo é exploratória: não tem variável, métrica, amostra,
+  // critério de sucesso nem resultado esperado — nasce já "em andamento".
+  const isField = method === "field_observation";
+
   const [created] = await db
     .insert(experiments)
     .values({
       projectId: project.id,
       hypothesisId,
       objective: String(formData.get("objective") || ""),
-      personaId: String(formData.get("personaId") || "") || null,
-      variable: String(formData.get("variable") || ""),
+      personaId: isField ? null : String(formData.get("personaId") || "") || null,
+      variable: isField ? null : String(formData.get("variable") || ""),
       method: method as never,
-      metric: String(formData.get("metric") || ""),
-      samplePlanned: Number(formData.get("samplePlanned") || 0) || null,
-      resultExpected: String(formData.get("resultExpected") || ""),
+      metric: isField ? null : String(formData.get("metric") || ""),
+      samplePlanned: isField ? null : Number(formData.get("samplePlanned") || 0) || null,
+      resultExpected: isField ? null : String(formData.get("resultExpected") || ""),
+      status: isField ? "in_progress" : "planned",
       createdBy: user.id,
     })
     .returning();
 
   await attachResearchToExperiment(project.id, created.id, hypothesisId, surveyIds, guideIds);
+
+  // Observação em campo: o que foi preenchido sobre a pessoa, o laboratório,
+  // a gravação ou as anotações já vira o primeiro registro do experimento.
+  if (isField) {
+    const first = observationFromForm(formData, project.id);
+    if (first.hasContent) {
+      const { hasContent: _hasContent, title, ...rest } = first;
+      await db.insert(fieldObservations).values({
+        projectId: project.id,
+        experimentId: created.id,
+        title: title ?? `Registro de ${first.observedAt.toLocaleDateString("pt-BR")}`,
+        ...rest,
+        createdBy: user.id,
+      });
+    }
+  }
 
   revalidatePath(`/hypotheses/${hypothesisId}`);
   redirect(`/experiments/${created.id}`);
@@ -239,6 +262,28 @@ export async function recordResult(experimentId: string, formData: FormData) {
     await recomputeHypothesis(exp.hypothesisId, user.id);
   }
 
+  revalidatePath(`/experiments/${experimentId}`);
+  revalidatePath(`/hypotheses/${exp.hypothesisId}`);
+}
+
+// Observação em campo: síntese livre do que foi aprendido, sem critério de
+// sucesso travado. Marcar como concluída é opcional e reversível.
+export async function saveObservationSynthesis(experimentId: string, formData: FormData) {
+  const { role } = await getPageContext();
+  if (role === "viewer") throw new Error("Sem permissão.");
+  const [exp] = await db.select().from(experiments).where(eq(experiments.id, experimentId)).limit(1);
+  if (!exp) throw new Error("Experimento não encontrado.");
+  if (exp.method !== "field_observation") throw new Error("Este experimento não é de observação em campo.");
+
+  const done = formData.get("done") === "true";
+  await db
+    .update(experiments)
+    .set({
+      resultObserved: String(formData.get("synthesis") || "").trim() || null,
+      status: done ? "completed" : "in_progress",
+      resultRecordedAt: done ? new Date() : null,
+    })
+    .where(eq(experiments.id, experimentId));
   revalidatePath(`/experiments/${experimentId}`);
   revalidatePath(`/hypotheses/${exp.hypothesisId}`);
 }
