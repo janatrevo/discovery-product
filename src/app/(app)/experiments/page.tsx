@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { experimentMethodLabel } from "@/lib/experiment-methods";
 import { getPageContext } from "@/lib/page-context";
 import { db } from "@/db";
 import { experiments, hypotheses } from "@/db/schema";
@@ -41,7 +42,7 @@ export default async function ExperimentsPage() {
             <Link key={e.id} href={`/experiments/${e.id}`}>
               <Card className="hover:shadow-md">
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm font-medium text-slate-900">{e.method}</p>
+                  <p className="text-sm font-medium text-slate-900">{experimentMethodLabel(e.method)}</p>
                   <Badge color={STATUS_COLOR[e.status] ?? "slate"}>{e.status}</Badge>
                 </div>
                 <p className="mt-1 text-xs text-slate-500">{e.objective}</p>

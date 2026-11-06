@@ -8,19 +8,9 @@ import { recommendExperimentMethods } from "@/lib/ai";
 import { HYPOTHESIS_TYPES } from "@/lib/hypothesis-types";
 import { Button, Card, PageHeader } from "@/components/ui/primitives";
 import { ExperimentMethodFields } from "@/components/experiment-method-fields";
+import { EXPERIMENT_METHOD_LABELS } from "@/lib/experiment-methods";
 import { surveysForHypothesis, guidesForHypothesis } from "@/lib/research-links";
 
-const METHOD_LABELS: Record<string, string> = {
-  interview: "Entrevista",
-  survey: "Survey",
-  usability_test: "Teste de usabilidade",
-  concept_test: "Teste de conceito",
-  landing_page: "Landing page",
-  fake_door: "Fake door",
-  ab_test: "A/B test",
-  prototype_test: "Teste de protótipo",
-  price_test: "Teste de preço",
-};
 
 export default async function NewExperimentPage({
   searchParams,
@@ -141,7 +131,7 @@ export default async function NewExperimentPage({
         <ul className="mt-1 space-y-1 text-sm text-slate-600">
           {recommendations.map((r) => (
             <li key={r.method}>
-              <strong>{METHOD_LABELS[r.method] ?? r.method}</strong> — {r.why}
+              <strong>{EXPERIMENT_METHOD_LABELS[r.method] ?? r.method}</strong> — {r.why}
             </li>
           ))}
         </ul>
@@ -154,7 +144,7 @@ export default async function NewExperimentPage({
       <Card>
         <form action={createExperiment.bind(null, hypothesisId)}>
           <ExperimentMethodFields
-            methods={Object.entries(METHOD_LABELS).map(([value, label]) => ({ value, label }))}
+            methods={Object.entries(EXPERIMENT_METHOD_LABELS).map(([value, label]) => ({ value, label }))}
             defaultMethod={recommendations[0]?.method ?? "interview"}
             surveys={surveyOptions}
             guides={guideOptions}

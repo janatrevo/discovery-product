@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { experimentMethodLabel } from "@/lib/experiment-methods";
 import { db } from "@/db";
 import { experiments } from "@/db/schema";
 import { eq, desc } from "drizzle-orm";
@@ -25,7 +26,7 @@ export async function ExperimentsMiniList({ hypothesisId }: { hypothesisId: stri
           <Link key={e.id} href={`/experiments/${e.id}`}>
             <Card className="hover:shadow-md">
               <div className="flex items-center justify-between">
-                <p className="text-sm font-medium text-slate-800">{e.method}</p>
+                <p className="text-sm font-medium text-slate-800">{experimentMethodLabel(e.method)}</p>
                 <Badge>{e.status}</Badge>
               </div>
               <p className="mt-1 text-xs text-slate-500">{e.objective}</p>

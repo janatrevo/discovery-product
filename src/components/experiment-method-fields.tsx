@@ -176,6 +176,17 @@ export function ExperimentMethodFields({
         </Select>
       </Field>
 
+      {method === "field_observation" && (
+        <div className="mb-3 rounded-md border border-teal-200 bg-teal-50 p-3 text-xs text-teal-900">
+          <p className="font-medium">Observação em campo (imersão)</p>
+          <p className="mt-1">
+            Para acompanhar o dia a dia real da operação: sistemas usados, passos manuais, pessoas e setores. Não é uma
+            entrevista com roteiro. Depois de criar o experimento, você registra cada conversa ou observação — com
+            gravação e transcrição, ou só com anotações quando não for possível gravar.
+          </p>
+        </div>
+      )}
+
       {(isSurvey || isInterview) && (
         <div className="mb-3 rounded-md border border-slate-200 bg-slate-50 p-3">
           <p className="text-xs font-medium text-slate-700">

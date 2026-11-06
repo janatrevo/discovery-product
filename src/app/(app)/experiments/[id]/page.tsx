@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { experimentMethodLabel } from "@/lib/experiment-methods";
 import { notFound } from "next/navigation";
 import { db } from "@/db";
 import {
@@ -10,8 +11,9 @@ import {
   interviews,
   experimentSurveys,
   experimentInterviewGuides,
+  fieldObservations,
 } from "@/db/schema";
-import { eq, sql } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { getPageContext } from "@/lib/page-context";
 import { Badge, Button, Card, Field, Input, Label, PageHeader, Select, Textarea } from "@/components/ui/primitives";
 import {
@@ -57,6 +59,24 @@ export default async function ExperimentDetailPage({ params }: { params: Promise
       .from(interviewGuides)
       .where(eq(interviewGuides.projectId, project.id)),
   ]);
+  const isFieldObservation = exp.method === "field_observation";
+  const observations = isFieldObservation
+    ? await db
+        .select({
+          id: fieldObservations.id,
+          title: fieldObservations.title,
+          site: fieldObservations.site,
+          area: fieldObservations.area,
+          personName: fieldObservations.personName,
+          personRole: fieldObservations.personRole,
+          observedAt: fieldObservations.observedAt,
+          hasAudio: sql<boolean>`(${fieldObservations.audioPath} is not null)`,
+          hasTranscript: sql<boolean>`(${fieldObservations.transcript} is not null)`,
+        })
+        .from(fieldObservations)
+        .where(eq(fieldObservations.experimentId, id))
+        .orderBy(desc(fieldObservations.observedAt), desc(fieldObservations.createdAt))
+    : [];
   const linkedSurveyIds = new Set(linkedSurveys.map((x) => x.id));
   const linkedGuideIds = new Set(linkedGuides.map((x) => x.id));
   const availableSurveys = allSurveys.filter((x) => !linkedSurveyIds.has(x.id));
@@ -70,7 +90,7 @@ export default async function ExperimentDetailPage({ params }: { params: Promise
   return (
     <div className="max-w-2xl space-y-4">
       <PageHeader
-        title={`Experimento — ${exp.method}`}
+        title={`Experimento — ${experimentMethodLabel(exp.method)}`}
         description={hyp ? `Hipótese: ${hyp.title}` : undefined}
         actions={<Badge>{exp.status}</Badge>}
       />
@@ -82,6 +102,51 @@ export default async function ExperimentDetailPage({ params }: { params: Promise
         {exp.samplePlanned && <p><strong>Amostra planejada:</strong> {exp.samplePlanned}</p>}
         {exp.resultExpected && <p><strong>Resultado esperado:</strong> {exp.resultExpected}</p>}
       </Card>
+
+      {isFieldObservation && (
+        <Card>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-semibold text-slate-700">Registros de observação</p>
+              <p className="text-xs text-slate-500">
+                Cada conversa ou observação no local. Com gravação e transcrição, ou só com anotações.
+              </p>
+            </div>
+            {canEdit && (
+              <Link href={`/experiments/${id}/observations/new`}>
+                <Button size="sm">+ Novo registro</Button>
+              </Link>
+            )}
+          </div>
+          {observations.length === 0 ? (
+            <p className="text-sm text-slate-400">Nenhum registro ainda.</p>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {observations.map((o) => {
+                const who = [o.personName, o.personRole].filter(Boolean).join(" — ");
+                const where = [o.site, o.area].filter(Boolean).join(" · ");
+                return (
+                  <li key={o.id} className="py-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <Link href={`/experiments/${id}/observations/${o.id}`} className="text-sm font-medium text-indigo-700 hover:underline">
+                        {o.title}
+                      </Link>
+                      <Badge color={o.hasAudio || o.hasTranscript ? "indigo" : "amber"}>
+                        {o.hasAudio || o.hasTranscript ? "com gravação" : "só anotações"}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      {new Date(o.observedAt).toLocaleDateString("pt-BR")}
+                      {where ? ` · ${where}` : ""}
+                      {who ? ` · ${who}` : ""}
+                    </p>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </Card>
+      )}
 
       {showResearch && (
         <Card>

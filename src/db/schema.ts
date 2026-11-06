@@ -74,6 +74,8 @@ export const experimentMethodEnum = pgEnum("experiment_method", [
   "ab_test",
   "prototype_test",
   "price_test",
+  // Imersão no dia a dia da operação (observação em campo, com ou sem gravação).
+  "field_observation",
 ]);
 
 export const experimentStatusEnum = pgEnum("experiment_status", [
@@ -422,6 +424,34 @@ export const experiments = pgTable("experiments", {
   nextStep: text("next_step"),
   status: experimentStatusEnum("status").notNull().default("planned"),
   resultRecordedAt: timestamp("result_recorded_at", { withTimezone: true }),
+  createdBy: uuid("created_by").references(() => users.id),
+  createdAt: createdAt(),
+});
+
+// ---------- Observação em campo (imersão) ----------
+// Registros de um experimento do método "field_observation": cada linha é uma
+// conversa/observação feita no local (ex.: gerente do call center, recepção).
+// Pode ter gravação + transcrição, ou só anotações (quando não foi possível
+// gravar). Não é entrevista qualitativa: não pertence a roteiro nem a persona.
+export const fieldObservations = pgTable("field_observations", {
+  id: id(),
+  projectId: uuid("project_id")
+    .references(() => projects.id, { onDelete: "cascade" })
+    .notNull(),
+  experimentId: uuid("experiment_id")
+    .references(() => experiments.id, { onDelete: "cascade" })
+    .notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  site: varchar("site", { length: 255 }), // laboratório / unidade
+  area: varchar("area", { length: 255 }), // setor observado (ex.: call center, recepção)
+  personName: varchar("person_name", { length: 255 }),
+  personRole: varchar("person_role", { length: 255 }),
+  observedAt: timestamp("observed_at", { withTimezone: true }).defaultNow().notNull(),
+  systemsUsed: text("systems_used"), // sistemas e ferramentas que aparecem no dia a dia
+  notes: text("notes"), // anotações de campo (único conteúdo quando não há gravação)
+  transcript: text("transcript"),
+  transcriptSegments: jsonb("transcript_segments").$type<{ speaker: string; start: number | null; text: string }[]>(),
+  audioPath: text("audio_path"),
   createdBy: uuid("created_by").references(() => users.id),
   createdAt: createdAt(),
 });
