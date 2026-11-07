@@ -9,6 +9,7 @@ const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 export const USABILITY_BUCKET = "usability-assets";
 export const INTERVIEW_BUCKET = "interview-recordings";
+export const FIELD_MEDIA_BUCKET = "field-observation-media";
 
 function assertConfigured() {
   if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
@@ -110,4 +111,15 @@ export async function createSignedUploadUrl(bucket: string, path: string) {
     throw new Error(body?.message || `Falha ao gerar URL de envio (HTTP ${res.status}).`);
   }
   return `${SUPABASE_URL}/storage/v1${body.url}`;
+}
+
+// Remove um arquivo do Storage (melhor esforço: quem chama ignora falhas, para
+// que um arquivo órfão nunca impeça a exclusão do registro no banco).
+export async function deleteFromStorage(bucket: string, path: string) {
+  assertConfigured();
+  const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${bucket}/${path}`, {
+    method: "DELETE",
+    headers: { apikey: SERVICE_ROLE_KEY!, Authorization: `Bearer ${SERVICE_ROLE_KEY}` },
+  });
+  if (!res.ok) throw new Error(`Falha ao remover arquivo do Storage (HTTP ${res.status}).`);
 }

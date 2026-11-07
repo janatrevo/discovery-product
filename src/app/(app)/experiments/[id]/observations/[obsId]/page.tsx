@@ -9,6 +9,9 @@ import { FieldObservationForm } from "@/components/field-observation-form";
 import { InterviewTranscriptViewer } from "@/components/interview-transcript-viewer";
 import { parseTranscript } from "@/lib/transcript-parser";
 import { getSignedUrl, INTERVIEW_BUCKET } from "@/lib/supabase-storage";
+import { getFieldMedia } from "@/lib/field-media";
+import { FieldMediaGallery } from "@/components/field-media-gallery";
+import { FieldMediaUploader } from "@/components/field-media-uploader";
 import { deleteFieldObservation, renameObservationSpeaker, updateFieldObservation } from "../../../observation-actions";
 
 export default async function ObservationDetailPage({
@@ -36,6 +39,7 @@ export default async function ObservationDetailPage({
     }
   }
   const hasRecording = !!obs.audioPath || segments.length > 0;
+  const media = await getFieldMedia(id, obsId);
 
   const meta: [string, string | null][] = [
     ["Laboratório / unidade", obs.site],
@@ -88,6 +92,23 @@ export default async function ObservationDetailPage({
           />
         </div>
       )}
+
+      <Card>
+        <p className="mb-1 text-sm font-semibold text-slate-700">Fotos e vídeos deste registro</p>
+        <p className="mb-3 text-xs text-slate-500">
+          Telas dos sistemas, balcão, papéis e vídeos curtos. Os arquivos também aparecem na página do experimento.
+        </p>
+        {canEdit && (
+          <div className="mb-4">
+            <FieldMediaUploader
+              experimentId={id}
+              observations={[{ id: obsId, title: obs.title }]}
+              defaultObservationId={obsId}
+            />
+          </div>
+        )}
+        <FieldMediaGallery items={media} canEdit={canEdit} />
+      </Card>
 
       {canEdit && (
         <Card>

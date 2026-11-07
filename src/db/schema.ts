@@ -456,6 +456,28 @@ export const fieldObservations = pgTable("field_observations", {
   createdAt: createdAt(),
 });
 
+// Fotos e vídeos de um experimento de observação em campo (por exemplo, telas
+// dos sistemas atuais). Os arquivos ficam no Supabase Storage (bucket privado).
+export const fieldObservationMedia = pgTable("field_observation_media", {
+  id: id(),
+  projectId: uuid("project_id")
+    .references(() => projects.id, { onDelete: "cascade" })
+    .notNull(),
+  experimentId: uuid("experiment_id")
+    .references(() => experiments.id, { onDelete: "cascade" })
+    .notNull(),
+  // Registro de observação ao qual a mídia pertence (opcional).
+  observationId: uuid("observation_id").references(() => fieldObservations.id, { onDelete: "set null" }),
+  kind: varchar("kind", { length: 10 }).notNull(), // "photo" | "video"
+  filePath: text("file_path").notNull(),
+  fileName: varchar("file_name", { length: 255 }),
+  contentType: varchar("content_type", { length: 100 }),
+  systemName: varchar("system_name", { length: 255 }), // sistema ou tela fotografada
+  caption: text("caption"),
+  createdBy: uuid("created_by").references(() => users.id),
+  createdAt: createdAt(),
+});
+
 // ---------- Pesquisa quantitativa ----------
 export const surveys = pgTable("surveys", {
   id: id(),

@@ -15,6 +15,9 @@ import {
 } from "@/db/schema";
 import { desc, eq, sql } from "drizzle-orm";
 import { getPageContext } from "@/lib/page-context";
+import { getFieldMedia } from "@/lib/field-media";
+import { FieldMediaGallery } from "@/components/field-media-gallery";
+import { FieldMediaUploader } from "@/components/field-media-uploader";
 import { Badge, Button, Card, Field, Input, Label, PageHeader, Select, Textarea } from "@/components/ui/primitives";
 import {
   lockSuccessCriteria,
@@ -78,6 +81,8 @@ export default async function ExperimentDetailPage({ params }: { params: Promise
         .where(eq(fieldObservations.experimentId, id))
         .orderBy(desc(fieldObservations.observedAt), desc(fieldObservations.createdAt))
     : [];
+  const media = isFieldObservation ? await getFieldMedia(id) : [];
+  const observationTitles = Object.fromEntries(observations.map((o) => [o.id, o.title]));
   const linkedSurveyIds = new Set(linkedSurveys.map((x) => x.id));
   const linkedGuideIds = new Set(linkedGuides.map((x) => x.id));
   const availableSurveys = allSurveys.filter((x) => !linkedSurveyIds.has(x.id));
@@ -146,6 +151,27 @@ export default async function ExperimentDetailPage({ params }: { params: Promise
               })}
             </ul>
           )}
+        </Card>
+      )}
+
+      {isFieldObservation && (
+        <Card>
+          <div className="mb-3">
+            <p className="text-sm font-semibold text-slate-700">Fotos e vídeos dos sistemas e do ambiente</p>
+            <p className="text-xs text-slate-500">
+              Telas dos sistemas atuais, balcões, etiquetas, papéis e vídeos curtos do dia a dia. Organizados por sistema
+              ou tela.
+            </p>
+          </div>
+          {canEdit && (
+            <div className="mb-4">
+              <FieldMediaUploader
+                experimentId={id}
+                observations={observations.map((o) => ({ id: o.id, title: o.title }))}
+              />
+            </div>
+          )}
+          <FieldMediaGallery items={media} canEdit={canEdit} observationTitles={observationTitles} />
         </Card>
       )}
 
