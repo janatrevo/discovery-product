@@ -8,9 +8,19 @@ import { Button, Card, Field, Input, Label, PageHeader, Select, Textarea } from 
 export default async function NewDecisionPage({
   searchParams,
 }: {
-  searchParams: Promise<{ opportunityId?: string }>;
+  searchParams: Promise<{
+    opportunityId?: string;
+    error?: string;
+    decisionText?: string;
+    rationale?: string;
+    h?: string;
+    e?: string;
+    override?: string;
+  }>;
 }) {
-  const { opportunityId } = await searchParams;
+  const { opportunityId, error, decisionText, rationale, h, e, override } = await searchParams;
+  const selectedHypotheses = (h ?? "").split(",").filter(Boolean);
+  const selectedEvidence = (e ?? "").split(",").filter(Boolean);
   const { project } = await getPageContext();
 
   const [opportunityList, hypothesisList, evidenceList] = await Promise.all([
@@ -26,14 +36,19 @@ export default async function NewDecisionPage({
         description="O log de decisões é append-only: uma vez registrada, a decisão não é apagada — apenas novas decisões substituem o rumo. É obrigatório referenciar hipótese e/ou evidência, a menos que você marque explicitamente que está sobrepondo a metodologia recomendada."
       />
       <Card>
+        {error && (
+          <p className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            Não foi possível registrar a decisão: {error}
+          </p>
+        )}
         <form action={createDecision}>
           <Field>
             <Label>O que foi decidido</Label>
-            <Textarea name="decisionText" rows={2} required placeholder="Ex.: Vamos priorizar o fluxo de onboarding simplificado no próximo ciclo." />
+            <Textarea name="decisionText" rows={2} required defaultValue={decisionText ?? ""} placeholder="Ex.: Vamos priorizar o fluxo de onboarding simplificado no próximo ciclo." />
           </Field>
           <Field>
             <Label>Racional</Label>
-            <Textarea name="rationale" rows={3} placeholder="Por que esta decisão, com base em quê?" />
+            <Textarea name="rationale" rows={3} defaultValue={rationale ?? ""} placeholder="Por que esta decisão, com base em quê?" />
           </Field>
           <Field>
             <Label>Oportunidade relacionada (opcional)</Label>
@@ -48,7 +63,7 @@ export default async function NewDecisionPage({
           </Field>
           <Field>
             <Label>Hipóteses referenciadas</Label>
-            <select name="hypothesisRefs" multiple className="h-28 w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
+            <select name="hypothesisRefs" multiple defaultValue={selectedHypotheses} className="h-28 w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
               {hypothesisList.map((h) => (
                 <option key={h.id} value={h.id}>
                   {h.title}
@@ -58,7 +73,7 @@ export default async function NewDecisionPage({
           </Field>
           <Field>
             <Label>Evidências referenciadas</Label>
-            <select name="evidenceRefs" multiple className="h-28 w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
+            <select name="evidenceRefs" multiple defaultValue={selectedEvidence} className="h-28 w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
               {evidenceList.map((e) => (
                 <option key={e.id} value={e.id}>
                   [{e.type}] {e.source}
@@ -68,7 +83,7 @@ export default async function NewDecisionPage({
           </Field>
           <Field>
             <label className="flex items-center gap-2 text-sm text-slate-600">
-              <input type="checkbox" name="overriddenMethodology" value="true" />
+              <input type="checkbox" name="overriddenMethodology" value="true" defaultChecked={override === "1"} />
               Esta decisão foi tomada apesar da metodologia recomendada não ter sido seguida
               (ex.: sem evidência real suficiente, ou contra o Confidence Score calculado).
             </label>
