@@ -26,7 +26,7 @@ export default async function AzureDevOpsPage() {
   return (
     <div>
       <PageHeader
-        title="Azure DevOps — Trevo Labs"
+        title="Azure DevOps — Trevo One"
         description="Cards do tipo Feature do board da equipe, sincronizados em tempo real com o Azure DevOps."
         actions={
           <>
@@ -50,7 +50,7 @@ export default async function AzureDevOpsPage() {
       ) : features.length === 0 ? (
         <EmptyState
           title="Nenhuma Feature no board ainda"
-          description="Crie a primeira Feature diretamente por aqui — ela aparece no board Trevo Labs do Azure DevOps na hora."
+          description="Crie a primeira Feature diretamente por aqui — ela aparece no board Trevo One do Azure DevOps na hora."
           action={
             isOwner ? (
               <Link href="/azure-devops/new">

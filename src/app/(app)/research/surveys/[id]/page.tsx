@@ -1,3 +1,4 @@
+import { SubmitLink } from "@/components/ui/button";
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import { db } from "@/db";
@@ -214,7 +215,7 @@ export default async function SurveyBuilderPage({ params }: { params: Promise<{ 
                 </div>
                 {canEdit && survey.status === "draft" && (
                   <form action={deleteQuestion.bind(null, id, q.id)}>
-                    <button className="text-xs text-red-500 hover:underline">remover</button>
+                    <SubmitLink className="text-xs text-red-500 hover:underline">remover</SubmitLink>
                   </form>
                 )}
               </div>

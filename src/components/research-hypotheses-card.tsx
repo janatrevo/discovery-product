@@ -1,3 +1,4 @@
+import { SubmitLink } from "@/components/ui/button";
 import Link from "next/link";
 import { db } from "@/db";
 import { hypotheses } from "@/db/schema";
@@ -60,9 +61,9 @@ export async function ResearchHypothesesCard({
                 <form action={unlinkAction}>
                   <input type="hidden" name={idField} value={researchId} />
                   <input type="hidden" name="hypothesisId" value={h.id} />
-                  <button type="submit" className="text-xs text-red-500 hover:underline">
+                  <SubmitLink className="text-xs text-red-500 hover:underline">
                     desvincular
-                  </button>
+                  </SubmitLink>
                 </form>
               )}
               </span>

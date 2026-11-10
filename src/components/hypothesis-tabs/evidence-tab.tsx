@@ -1,3 +1,4 @@
+import { SubmitLink } from "@/components/ui/button";
 import { db } from "@/db";
 import { evidence, hypothesisEvidence, personas } from "@/db/schema";
 import { eq, and, notInArray } from "drizzle-orm";
@@ -194,9 +195,9 @@ function EvidenceRow({
         </span>
         {canEdit && (
           <form action={unlinkEvidence.bind(null, hypothesisId, ev.id)}>
-            <button type="submit" className="text-red-500 hover:underline">
+            <SubmitLink className="text-red-500 hover:underline">
               desvincular
-            </button>
+            </SubmitLink>
           </form>
         )}
       </div>

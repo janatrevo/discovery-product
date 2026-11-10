@@ -1,30 +1,8 @@
-import { ButtonHTMLAttributes, InputHTMLAttributes, TextareaHTMLAttributes, SelectHTMLAttributes, ReactNode } from "react";
+import { InputHTMLAttributes, TextareaHTMLAttributes, SelectHTMLAttributes, ReactNode } from "react";
 import clsx from "clsx";
 
-export function Button({
-  className,
-  variant = "primary",
-  size = "md",
-  ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: "primary" | "secondary" | "ghost" | "danger";
-  size?: "sm" | "md";
-}) {
-  return (
-    <button
-      className={clsx(
-        "inline-flex items-center justify-center gap-1.5 rounded-md font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
-        size === "sm" ? "px-2.5 py-1.5 text-xs" : "px-3.5 py-2 text-sm",
-        variant === "primary" && "bg-indigo-600 text-white hover:bg-indigo-700",
-        variant === "secondary" && "bg-white text-slate-700 ring-1 ring-slate-300 hover:bg-slate-50",
-        variant === "ghost" && "text-slate-600 hover:bg-slate-100",
-        variant === "danger" && "bg-red-600 text-white hover:bg-red-700",
-        className
-      )}
-      {...props}
-    />
-  );
-}
+// Button e SubmitLink vivem em ./button (componente de cliente: mostram o andamento da ação).
+export { Button } from "./button";
 
 export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElement>) {
   return (

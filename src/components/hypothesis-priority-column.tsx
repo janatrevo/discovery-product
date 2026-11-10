@@ -45,6 +45,7 @@ export function HypothesisBoard({
   const [dragId, setDragId] = useState<string | null>(null);
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   function sourceStatusOf(id: string): string | null {
     for (const status of Object.keys(board)) {
@@ -63,8 +64,9 @@ export function HypothesisBoard({
         `Essa ação não pode ser desfeita.`
     );
     if (!ok) return;
+    setDeletingId(item.id);
     startTransition(() => {
-      deleteHypothesisFromList(item.id).then((res) => {
+      deleteHypothesisFromList(item.id).finally(() => setDeletingId(null)).then((res) => {
         if (!res.ok) {
           window.alert(res.error ?? "Não foi possível excluir a hipótese.");
           return;
@@ -211,9 +213,10 @@ export function HypothesisBoard({
                       <button
                         type="button"
                         onClick={() => handleDelete(h)}
-                        className="absolute bottom-3 right-4 text-xs font-medium text-red-500 hover:text-red-700 hover:underline"
+                        disabled={deletingId === h.id}
+                        className="absolute bottom-3 right-4 text-xs font-medium text-red-500 hover:text-red-700 hover:underline disabled:cursor-wait disabled:opacity-60 disabled:no-underline"
                       >
-                        excluir
+                        {deletingId === h.id ? "excluindo…" : "excluir"}
                       </button>
                     )}
                   </div>

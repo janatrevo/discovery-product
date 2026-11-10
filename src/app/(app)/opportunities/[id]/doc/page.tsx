@@ -1,3 +1,4 @@
+import { SubmitLink } from "@/components/ui/button";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/db";
@@ -210,16 +211,16 @@ export default async function ProductDocPage({
                   <div className="mt-2 flex flex-wrap gap-3 text-xs">
                     {s.aiGenerated && !s.confirmed && (
                       <form action={confirmUserStory.bind(null, s.id)}>
-                        <button className="text-emerald-600 hover:underline">confirmar</button>
+                        <SubmitLink className="text-emerald-600 hover:underline">confirmar</SubmitLink>
                       </form>
                     )}
                     <form action={toggleStoryDone.bind(null, s.id, !s.done)}>
-                      <button className="text-indigo-600 hover:underline">
+                      <SubmitLink className="text-indigo-600 hover:underline">
                         {s.done ? "reabrir" : "marcar concluída"}
-                      </button>
+                      </SubmitLink>
                     </form>
                     <form action={deleteUserStory.bind(null, s.id)}>
-                      <button className="text-red-500 hover:underline">remover</button>
+                      <SubmitLink className="text-red-500 hover:underline">remover</SubmitLink>
                     </form>
                   </div>
                 )}
@@ -273,7 +274,7 @@ export default async function ProductDocPage({
         <Card>
           <p className="mb-1 text-sm font-semibold text-slate-700">Azure DevOps</p>
           <p className="mb-3 text-xs text-slate-500">
-            Cria (ou atualiza) um card Feature no board Trevo Labs com este PRD — Description recebe o
+            Cria (ou atualiza) um card Feature no board Trevo One com este PRD — Description recebe o
             contexto, objetivos e user stories; Business Rules, Acceptance Criteria e Success Metrics
             entram como seções próprias dentro do card.
           </p>

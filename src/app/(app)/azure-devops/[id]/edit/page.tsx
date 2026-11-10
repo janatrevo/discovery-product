@@ -66,7 +66,7 @@ export default async function EditAzureFeaturePage({ params }: { params: Promise
     <div>
       <PageHeader
         title={`Editar Feature #${feature.id}`}
-        description="As alterações são salvas direto no board Trevo Labs do Azure DevOps."
+        description="As alterações são salvas direto no board Trevo One do Azure DevOps."
       />
       <Card className="max-w-2xl">
         <form action={updateAzureFeature.bind(null, featureId)}>

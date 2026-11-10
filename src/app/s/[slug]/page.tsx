@@ -1,3 +1,4 @@
+import { SubmitLink } from "@/components/ui/button";
 import { notFound } from "next/navigation";
 import { db } from "@/db";
 import { surveys, surveyQuestions } from "@/db/schema";
@@ -157,9 +158,9 @@ export default async function PublicSurveyPage({ params }: { params: Promise<{ s
             <QuestionInput q={q} />
           </div>
         ))}
-        <button type="submit" className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">
+        <SubmitLink className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">
           Enviar respostas
-        </button>
+        </SubmitLink>
       </form>
     </div>
   );

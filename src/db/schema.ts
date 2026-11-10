@@ -865,7 +865,7 @@ export const opportunities = pgTable("opportunities", {
   outcomeSummary: text("outcome_summary"),
   outcomeEvidenceId: uuid("outcome_evidence_id").references(() => evidence.id),
   // Integração com Azure DevOps (ver src/lib/azure-devops.ts): quando a
-  // oportunidade é enviada como Feature para o board Trevo Labs, guarda o id
+  // oportunidade é enviada como Feature para o board Trevo One, guarda o id
   // do work item (número, id nativo do Azure DevOps — não é o mesmo id uuid
   // desta tabela). planned{Start,End}Date alimentam o Gráfico Gantt de
   // roadmap (ver /azure-devops/roadmap) — são datas de planejamento do

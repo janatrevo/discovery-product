@@ -1,5 +1,6 @@
 "use client";
 
+import { SubmitLink } from "@/components/ui/button";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import clsx from "clsx";
 import { computeSpeakerStats, formatTimestamp, speakerLabel, type TranscriptSegment } from "@/lib/transcript-parser";
@@ -153,7 +154,7 @@ export function InterviewTranscriptViewer({ segments, audioUrl, intervieweeName,
                           defaultValue={sp.name}
                           className="w-full min-w-0 rounded border border-slate-300 px-1.5 py-1 text-xs"
                         />
-                        <button className="rounded bg-slate-100 px-2 text-xs text-slate-700 hover:bg-slate-200">ok</button>
+                        <SubmitLink className="rounded bg-slate-100 px-2 text-xs text-slate-700 hover:bg-slate-200">ok</SubmitLink>
                       </form>
                     </details>
                   )}

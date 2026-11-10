@@ -166,7 +166,7 @@ export async function updateProductDoc(opportunityId: string, formData: FormData
 }
 
 // Transforma a oportunidade (com seu PRD já gerado/revisado) em um card
-// Feature no board Trevo Labs do Azure DevOps — ou atualiza o card já
+// Feature no board Trevo One do Azure DevOps — ou atualiza o card já
 // vinculado, se a oportunidade já tiver sido enviada antes (nunca cria um
 // segundo card para a mesma oportunidade). Só Owner pode enviar, mesma régua
 // do resto da integração com Azure DevOps (ver src/app/(app)/azure-devops/actions.ts).

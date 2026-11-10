@@ -1,3 +1,4 @@
+import { SubmitLink } from "@/components/ui/button";
 import Link from "next/link";
 import { db } from "@/db";
 import { surveys, interviewGuides, surveyResponses } from "@/db/schema";
@@ -90,9 +91,9 @@ export async function ResearchMiniList({
                   <form action={unlinkSurveyFromHypothesis}>
                     <input type="hidden" name="surveyId" value={s.id} />
                     <input type="hidden" name="hypothesisId" value={hypothesisId} />
-                    <button type="submit" className="text-xs text-red-500 hover:underline">
+                    <SubmitLink className="text-xs text-red-500 hover:underline">
                       desvincular
-                    </button>
+                    </SubmitLink>
                   </form>
                 )}
               </li>
@@ -139,9 +140,9 @@ export async function ResearchMiniList({
                   <form action={unlinkGuideFromHypothesis}>
                     <input type="hidden" name="guideId" value={g.id} />
                     <input type="hidden" name="hypothesisId" value={hypothesisId} />
-                    <button type="submit" className="text-xs text-red-500 hover:underline">
+                    <SubmitLink className="text-xs text-red-500 hover:underline">
                       desvincular
-                    </button>
+                    </SubmitLink>
                   </form>
                 )}
               </li>

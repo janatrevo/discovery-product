@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import Link from "next/link";
+import { Spinner } from "@/components/ui/button";
 
 type ProjectRow = { project: { id: string; name: string }; role: string };
 
@@ -17,6 +18,7 @@ export function TopBar({
 }) {
   const router = useRouter();
   const [switching, setSwitching] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   async function onSwitch(projectId: string) {
     setSwitching(true);
@@ -30,9 +32,15 @@ export function TopBar({
   }
 
   async function onLogout() {
-    await fetch("/api/auth/logout", { method: "POST" });
-    router.push("/login");
-    router.refresh();
+    if (loggingOut) return;
+    setLoggingOut(true);
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+      router.push("/login");
+      router.refresh();
+    } catch {
+      setLoggingOut(false);
+    }
   }
 
   return (
@@ -62,8 +70,13 @@ export function TopBar({
       </div>
       <div className="flex items-center gap-3">
         <span className="text-sm text-slate-600">{user.name}</span>
-        <button onClick={onLogout} className="text-xs font-medium text-slate-400 hover:text-slate-600">
-          Sair
+        <button
+          onClick={onLogout}
+          disabled={loggingOut}
+          className="inline-flex items-center gap-1 text-xs font-medium text-slate-400 hover:text-slate-600 disabled:cursor-wait disabled:opacity-60"
+        >
+          {loggingOut && <Spinner className="h-3 w-3" />}
+          {loggingOut ? "Saindo…" : "Sair"}
         </button>
       </div>
     </header>

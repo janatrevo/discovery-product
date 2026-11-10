@@ -1,3 +1,4 @@
+import { SubmitLink } from "@/components/ui/button";
 import { notFound } from "next/navigation";
 import { db } from "@/db";
 import { interviews, codes, codedSegments, interviewGuides, hypotheses, evidence, personas, hypothesisEvidence } from "@/db/schema";
@@ -197,11 +198,11 @@ export default async function InterviewDetailPage({
                 <div className="mt-1 flex gap-3 text-xs">
                   {!seg.confirmed && (
                     <form action={confirmSegment.bind(null, seg.id)}>
-                      <button className="text-emerald-600 hover:underline">confirmar</button>
+                      <SubmitLink className="text-emerald-600 hover:underline">confirmar</SubmitLink>
                     </form>
                   )}
                   <form action={deleteSegment.bind(null, seg.id)}>
-                    <button className="text-red-500 hover:underline">remover</button>
+                    <SubmitLink className="text-red-500 hover:underline">remover</SubmitLink>
                   </form>
                 </div>
               )}

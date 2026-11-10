@@ -1,4 +1,4 @@
-// Integração com o Azure DevOps (board "Trevo Labs") via REST API — usada
+// Integração com o Azure DevOps (board "Trevo One") via REST API — usada
 // só para gerenciar work items do tipo Feature (criar, editar, excluir e
 // listar). Autenticação por Personal Access Token (PAT), formato Basic auth
 // com usuário vazio (padrão documentado da própria Microsoft para PAT:
@@ -38,7 +38,7 @@ export function featureWebUrl(id: number) {
 }
 
 // Escapa aspas simples pro literal de string do WIQL (equivalente ao SQL:
-// dobra a aspa simples). Necessário porque "Trevo Labs" — como qualquer nome
+// dobra a aspa simples). Necessário porque "Trevo One" — como qualquer nome
 // de projeto — pode conter espaço/caracteres especiais.
 function escapeWiqlString(value: string) {
   return value.replace(/'/g, "''");

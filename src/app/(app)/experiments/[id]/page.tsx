@@ -1,3 +1,4 @@
+import { SubmitLink } from "@/components/ui/button";
 import Link from "next/link";
 import { experimentMethodLabel } from "@/lib/experiment-methods";
 import { notFound } from "next/navigation";
@@ -201,9 +202,9 @@ export default async function ExperimentDetailPage({ params }: { params: Promise
                     <form action={unlinkResearchFromExperiment}>
                       <input type="hidden" name="experimentId" value={id} />
                       <input type="hidden" name="surveyId" value={x.id} />
-                      <button type="submit" className="text-xs text-red-500 hover:underline">
+                      <SubmitLink className="text-xs text-red-500 hover:underline">
                         remover
-                      </button>
+                      </SubmitLink>
                     </form>
                   )}
                 </li>
@@ -220,9 +221,9 @@ export default async function ExperimentDetailPage({ params }: { params: Promise
                     <form action={unlinkResearchFromExperiment}>
                       <input type="hidden" name="experimentId" value={id} />
                       <input type="hidden" name="guideId" value={x.id} />
-                      <button type="submit" className="text-xs text-red-500 hover:underline">
+                      <SubmitLink className="text-xs text-red-500 hover:underline">
                         remover
-                      </button>
+                      </SubmitLink>
                     </form>
                   )}
                 </li>

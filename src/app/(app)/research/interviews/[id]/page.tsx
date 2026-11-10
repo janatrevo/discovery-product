@@ -1,3 +1,4 @@
+import { SubmitLink } from "@/components/ui/button";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/db";
@@ -123,7 +124,7 @@ export default async function GuideDetailPage({ params }: { params: Promise<{ id
                   </p>
                   {canEdit && (
                     <form action={deleteGuideQuestion.bind(null, id, q.id)}>
-                      <button className="text-xs text-red-500 hover:underline">remover</button>
+                      <SubmitLink className="text-xs text-red-500 hover:underline">remover</SubmitLink>
                     </form>
                   )}
                 </div>

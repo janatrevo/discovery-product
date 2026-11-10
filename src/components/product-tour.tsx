@@ -75,7 +75,7 @@ const STEPS: TourStep[] = [
     tourId: "nav-azure-devops",
     title: "Azure DevOps",
     description:
-      "Cards do tipo Feature do board Trevo Labs, sincronizados direto com o Azure DevOps. Só administradores (Owner) podem criar, editar ou excluir.",
+      "Cards do tipo Feature do board Trevo One, sincronizados direto com o Azure DevOps. Só administradores (Owner) podem criar, editar ou excluir.",
   },
   {
     tourId: "nav-settings",
