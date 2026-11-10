@@ -42,15 +42,19 @@ const PRIORITY_COLORS: Record<string, "red" | "amber" | "slate"> = {
   could: "slate",
 };
 
+// Enviar a Feature e cada user story ao Azure DevOps pode levar alguns segundos.
+export const maxDuration = 60;
+
 export default async function ProductDocPage({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ azureError?: string; azureOk?: string }>;
+  searchParams: Promise<{ azureError?: string; azureOk?: string; azureStories?: string }>;
 }) {
   const { id } = await params;
-  const { azureError, azureOk } = await searchParams;
+  const { azureError, azureOk, azureStories } = await searchParams;
+  const [storiesCreated, storiesUpdated] = (azureStories ?? "0,0").split(",").map((n) => Number(n) || 0);
   const { project, role } = await getPageContext();
   const [opp] = await db.select().from(opportunities).where(eq(opportunities.id, id)).limit(1);
   if (!opp || opp.projectId !== project.id) notFound();
@@ -275,8 +279,8 @@ export default async function ProductDocPage({
           <p className="mb-1 text-sm font-semibold text-slate-700">Azure DevOps</p>
           <p className="mb-3 text-xs text-slate-500">
             Cria (ou atualiza) um card Feature no board Trevo One com este PRD — Description recebe o
-            contexto, objetivos e user stories; Business Rules, Acceptance Criteria e Success Metrics
-            entram como seções próprias dentro do card.
+            contexto, objetivos, regras de negócio e métricas — e cada user story confirmada vira um item
+            filho da Feature, com os critérios de aceite. Reenviar atualiza, sem duplicar.
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <form action={sendToAzureDevOps.bind(null, id)}>
@@ -300,7 +304,10 @@ export default async function ProductDocPage({
           )}
           {azureOk && !azureError && (
             <p className="mt-2 rounded-md border border-emerald-200 bg-emerald-50 p-2 text-xs text-emerald-700">
-              Feature enviada ao Azure DevOps.
+              Feature enviada ao Azure DevOps
+              {storiesCreated + storiesUpdated > 0
+                ? ` — ${storiesCreated} user stor${storiesCreated === 1 ? "y criada" : "ies criadas"} e ${storiesUpdated} atualizada${storiesUpdated === 1 ? "" : "s"}, vinculadas à Feature.`
+                : "."}
             </p>
           )}
         </Card>

@@ -14,6 +14,14 @@
 // Todas as chamadas de criação/edição usam Content-Type: application/json-patch+json
 // com um array de operações { op, path, value }.
 
+import {
+  buildAcceptanceCriteriaHtml,
+  buildStoryDescription,
+  storyAzurePriority,
+  storyTitle,
+  type StoryForAzure,
+} from "./azure-feature-description";
+
 const ORG = process.env.AZURE_DEVOPS_ORG;
 const PROJECT = process.env.AZURE_DEVOPS_PROJECT;
 const PAT = process.env.AZURE_DEVOPS_PAT;
@@ -295,4 +303,144 @@ export function featureStateColor(state: string): "slate" | "sky" | "emerald" | 
   if (s.includes("progress") || s.includes("active") || s.includes("doing")) return "sky";
   if (s.includes("new") || s.includes("proposed") || s.includes("to do")) return "amber";
   return "slate";
+}
+
+
+// ---------------------------------------------------------------------------
+// User Stories como itens FILHOS da Feature
+// ---------------------------------------------------------------------------
+// O tipo do item de história muda conforme o processo do projeto no Azure:
+// Agile = "User Story", Scrum = "Product Backlog Item", CMMI = "Requirement".
+// Descobrimos qual existe no projeto em vez de fixar um nome. O vínculo com a
+// Feature é a relação de hierarquia (filho -> pai: Hierarchy-Reverse).
+// Para não duplicar ao reenviar, cada história recebe a tag
+// "discovery-story-<id>" e, no reenvio, os filhos da Feature são lidos e
+// casados por essa tag (atualiza o que existe, cria só o que falta).
+
+const STORY_TYPE_PREFERENCE = ["User Story", "Product Backlog Item", "Requirement"];
+const STORY_TAG_PREFIX = "discovery-story-";
+const FIELD_ACCEPTANCE = "Microsoft.VSTS.Common.AcceptanceCriteria";
+const FIELD_PRIORITY = "Microsoft.VSTS.Common.Priority";
+
+let storyTypeCache: { name: string; fields: Set<string> } | null = null;
+
+async function getStoryType() {
+  if (storyTypeCache) return storyTypeCache;
+  const res = await fetch(`${baseUrl()}/workitemtypes?api-version=${API_VERSION}`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(await parseErrorBody(res));
+  const names: string[] = ((await res.json()).value ?? []).map((t: { name: string }) => t.name);
+  const name = STORY_TYPE_PREFERENCE.find((n) => names.includes(n));
+  if (!name) {
+    throw new Error(
+      `Este projeto do Azure DevOps não tem um tipo de história (${STORY_TYPE_PREFERENCE.join(", ")}). Tipos encontrados: ${names.join(", ")}.`
+    );
+  }
+  const fres = await fetch(`${baseUrl()}/workitemtypes/${encodeURIComponent(name)}/fields?api-version=${API_VERSION}`, {
+    headers: authHeaders(),
+  });
+  if (!fres.ok) throw new Error(await parseErrorBody(fres));
+  const fields = new Set<string>(((await fres.json()).value ?? []).map((f: { referenceName: string }) => f.referenceName));
+  storyTypeCache = { name, fields };
+  return storyTypeCache;
+}
+
+type ExistingChild = { id: number; tags: string };
+
+// Filhos atuais da Feature (id + tags), para casar com as histórias já enviadas.
+async function listChildren(featureId: number): Promise<ExistingChild[]> {
+  const res = await fetch(`${baseUrl()}/workitems/${featureId}?$expand=relations&api-version=${API_VERSION}`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(await parseErrorBody(res));
+  const relations: { rel: string; url: string }[] = (await res.json()).relations ?? [];
+  const ids = relations
+    .filter((r) => r.rel === "System.LinkTypes.Hierarchy-Forward")
+    .map((r) => Number(r.url.split("/").pop()))
+    .filter((n) => Number.isFinite(n));
+  if (ids.length === 0) return [];
+  const out: ExistingChild[] = [];
+  for (let i = 0; i < ids.length; i += 150) {
+    const chunk = ids.slice(i, i + 150);
+    const r = await fetch(
+      `${baseUrl()}/workitems?ids=${chunk.join(",")}&fields=System.Id,System.Tags&api-version=${API_VERSION}`,
+      { headers: authHeaders() }
+    );
+    if (!r.ok) throw new Error(await parseErrorBody(r));
+    for (const w of (await r.json()).value ?? []) {
+      out.push({ id: w.id, tags: typeof w.fields?.["System.Tags"] === "string" ? w.fields["System.Tags"] : "" });
+    }
+  }
+  return out;
+}
+
+function storyFieldOps(s: StoryForAzure, type: { fields: Set<string> }) {
+  const hasAcceptance = type.fields.has(FIELD_ACCEPTANCE);
+  const ops: { op: string; path: string; value: unknown }[] = [
+    { op: "add", path: "/fields/System.Title", value: storyTitle(s) },
+    { op: "add", path: "/fields/System.Description", value: buildStoryDescription(s, !hasAcceptance) },
+  ];
+  if (hasAcceptance) {
+    ops.push({ op: "add", path: `/fields/${FIELD_ACCEPTANCE}`, value: buildAcceptanceCriteriaHtml(s.acceptanceCriteria) });
+  }
+  if (type.fields.has(FIELD_PRIORITY)) {
+    ops.push({ op: "add", path: `/fields/${FIELD_PRIORITY}`, value: storyAzurePriority(s.priority) });
+  }
+  return ops;
+}
+
+// Cria (ou atualiza) cada história como filha da Feature. Devolve quantas
+// foram criadas/atualizadas. Se uma falhar, as anteriores já estão no Azure e
+// um novo envio continua de onde parou (casa pela tag).
+export async function syncUserStories(featureId: number, stories: StoryForAzure[]) {
+  assertConfigured();
+  if (stories.length === 0) return { created: 0, updated: 0, typeName: null as string | null };
+
+  const type = await getStoryType();
+  const children = await listChildren(featureId);
+  const byTag = new Map<string, number>();
+  for (const c of children) {
+    for (const tag of c.tags.split(";").map((t) => t.trim())) {
+      if (tag.startsWith(STORY_TAG_PREFIX)) byTag.set(tag, c.id);
+    }
+  }
+
+  const parentUrl = `https://dev.azure.com/${encodeURIComponent(ORG!)}/_apis/wit/workItems/${featureId}`;
+  let created = 0;
+  let updated = 0;
+
+  // Poucas chamadas em paralelo (o servidor tem tempo limitado e o Azure limita a taxa).
+  const CONCURRENCY = 4;
+  for (let i = 0; i < stories.length; i += CONCURRENCY) {
+    await Promise.all(
+      stories.slice(i, i + CONCURRENCY).map(async (story) => {
+        const tag = `${STORY_TAG_PREFIX}${story.id}`;
+        const existingId = byTag.get(tag);
+        const ops = storyFieldOps(story, type);
+        if (existingId) {
+          const res = await fetch(`${baseUrl()}/workitems/${existingId}?api-version=${API_VERSION}`, {
+            method: "PATCH",
+            headers: authHeaders({ "Content-Type": "application/json-patch+json" }),
+            body: JSON.stringify(ops),
+          });
+          if (!res.ok) throw new Error(await parseErrorBody(res));
+          updated++;
+        } else {
+          ops.push({ op: "add", path: "/fields/System.Tags", value: tag });
+          ops.push({
+            op: "add",
+            path: "/relations/-",
+            value: { rel: "System.LinkTypes.Hierarchy-Reverse", url: parentUrl },
+          });
+          const res = await fetch(`${baseUrl()}/workitems/$${encodeURIComponent(type.name)}?api-version=${API_VERSION}`, {
+            method: "POST",
+            headers: authHeaders({ "Content-Type": "application/json-patch+json" }),
+            body: JSON.stringify(ops),
+          });
+          if (!res.ok) throw new Error(await parseErrorBody(res));
+          created++;
+        }
+      })
+    );
+  }
+  return { created, updated, typeName: type.name };
 }

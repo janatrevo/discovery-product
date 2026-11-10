@@ -14,7 +14,7 @@ import { eq, and, asc, sql } from "drizzle-orm";
 import { getPageContext } from "@/lib/page-context";
 import { draftProductDoc } from "@/lib/ai";
 import { linesToArray } from "@/lib/list-utils";
-import { createFeature, updateFeature } from "@/lib/azure-devops";
+import { createFeature, updateFeature, syncUserStories } from "@/lib/azure-devops";
 import { buildFeatureDescription } from "@/lib/azure-feature-description";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -179,6 +179,7 @@ export async function sendToAzureDevOps(opportunityId: string) {
   // O redirect() fica FORA do try/catch porque ele funciona lançando uma
   // exceção especial que não pode ser engolida.
   let errorMessage: string | null = null;
+  let storiesSummary = "0,0";
   try {
     if (role !== "owner") throw new Error("Só administradores (Owner) podem enviar para o Azure DevOps.");
 
@@ -186,11 +187,14 @@ export async function sendToAzureDevOps(opportunityId: string) {
     const [doc] = await db.select().from(productDocs).where(eq(productDocs.opportunityId, opportunityId)).limit(1);
     if (!doc) throw new Error("Gere (ou escreva) o PRD desta oportunidade antes de enviar para o Azure DevOps.");
 
-    const stories = await db
-      .select()
-      .from(userStories)
-      .where(eq(userStories.opportunityId, opportunityId))
-      .orderBy(asc(userStories.orderIndex));
+    // Só as stories confirmadas (as sugeridas por IA e ainda não revisadas ficam de fora).
+    const stories = (
+      await db
+        .select()
+        .from(userStories)
+        .where(eq(userStories.opportunityId, opportunityId))
+        .orderBy(asc(userStories.orderIndex))
+    ).filter((s) => s.confirmed);
 
     const description = buildFeatureDescription({
       opportunityTitle: opp.title,
@@ -207,14 +211,33 @@ export async function sendToAzureDevOps(opportunityId: string) {
         soThat: s.soThat,
         acceptanceCriteria: (s.acceptanceCriteria as string[]) ?? [],
       })),
+      storiesAsChildren: true,
     });
 
-    if (opp.azureFeatureId) {
-      await updateFeature(opp.azureFeatureId, { title: opp.title, description });
+    let featureId = opp.azureFeatureId;
+    if (featureId) {
+      await updateFeature(featureId, { title: opp.title, description });
     } else {
       const created = await createFeature({ title: opp.title, description });
+      featureId = created.id;
+      // Grava o vínculo já aqui: se as stories falharem logo abaixo, um novo
+      // envio reaproveita este card em vez de criar outro.
       await db.update(opportunities).set({ azureFeatureId: created.id }).where(eq(opportunities.id, opportunityId));
     }
+
+    // Cada user story vira um item filho da Feature (com os critérios de aceite).
+    const sync = await syncUserStories(
+      featureId,
+      stories.map((s) => ({
+        id: s.id,
+        asA: s.asA,
+        iWant: s.iWant,
+        soThat: s.soThat,
+        acceptanceCriteria: (s.acceptanceCriteria as string[]) ?? [],
+        priority: s.priority,
+      }))
+    );
+    storiesSummary = `${sync.created},${sync.updated}`;
   } catch (e) {
     errorMessage = e instanceof Error ? e.message : String(e);
     console.error("[sendToAzureDevOps] falhou:", errorMessage);
@@ -227,7 +250,7 @@ export async function sendToAzureDevOps(opportunityId: string) {
   if (errorMessage) {
     redirect(`/opportunities/${opportunityId}/doc?azureError=${encodeURIComponent(errorMessage.slice(0, 900))}`);
   }
-  redirect(`/opportunities/${opportunityId}/doc?azureOk=1`);
+  redirect(`/opportunities/${opportunityId}/doc?azureOk=1&azureStories=${storiesSummary}`);
 }
 
 export async function markDocReviewed(opportunityId: string) {

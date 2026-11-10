@@ -35,6 +35,9 @@ export function buildFeatureDescription(input: {
   businessRules?: string[];
   successMetrics?: string[];
   userStories: { asA: string | null; iWant: string; soThat: string | null; acceptanceCriteria: string[] }[];
+  // Quando as stories são enviadas como itens filhos da Feature (cada uma com
+  // seus critérios de aceite), não repetimos a lista delas aqui.
+  storiesAsChildren?: boolean;
 }) {
   const parts: string[] = [];
 
@@ -49,7 +52,11 @@ export function buildFeatureDescription(input: {
   parts.push(section("Fora de escopo", input.nonGoals));
   parts.push(section("Perguntas em aberto", input.openQuestions));
 
-  if (input.userStories.length > 0) {
+  if (input.storiesAsChildren && input.userStories.length > 0) {
+    parts.push(
+      `<h3>User Stories</h3><p>${input.userStories.length} user stories vinculadas a esta Feature (veja a aba Related Work / itens filhos).</p>`
+    );
+  } else if (input.userStories.length > 0) {
     const lis = input.userStories
       .map((s) => {
         const line = `Como <strong>${escapeHtml(s.asA || "usuário")}</strong>, eu quero ${escapeHtml(s.iWant)}${
@@ -68,7 +75,7 @@ export function buildFeatureDescription(input: {
   const allAcceptanceCriteria = Array.from(
     new Set(input.userStories.flatMap((s) => s.acceptanceCriteria).filter(Boolean))
   );
-  parts.push(section("Acceptance Criteria", allAcceptanceCriteria));
+  if (!input.storiesAsChildren) parts.push(section("Acceptance Criteria", allAcceptanceCriteria));
 
   parts.push(section("Success Metrics", input.successMetrics));
 
@@ -79,4 +86,54 @@ export function buildFeatureDescription(input: {
   );
 
   return parts.filter(Boolean).join("\n");
+}
+
+
+// ---- User Stories enviadas como itens filhos da Feature ----
+
+export type StoryForAzure = {
+  id: string;
+  asA: string | null;
+  iWant: string;
+  soThat: string | null;
+  acceptanceCriteria: string[];
+  priority: string; // must | should | could
+};
+
+const PRIORITY_LABEL: Record<string, string> = { must: "Deve ter", should: "Deveria ter", could: "Poderia ter" };
+
+// Azure: Priority 1 (mais alta) a 4.
+export function storyAzurePriority(priority: string) {
+  return priority === "must" ? 1 : priority === "could" ? 3 : 2;
+}
+
+export function storyPriorityLabel(priority: string) {
+  return PRIORITY_LABEL[priority] ?? priority;
+}
+
+export function storyTitle(s: StoryForAzure) {
+  const text = `Como ${s.asA || "usuário"}, quero ${s.iWant}`.replace(/\s+/g, " ").trim();
+  return text.length > 250 ? `${text.slice(0, 247)}…` : text;
+}
+
+export function buildAcceptanceCriteriaHtml(items: string[]) {
+  const clean = items.filter(Boolean);
+  if (clean.length === 0) return "";
+  return `<ul>${clean.map((i) => `<li>${escapeHtml(i)}</li>`).join("")}</ul>`;
+}
+
+export function buildStoryDescription(s: StoryForAzure, includeCriteria: boolean) {
+  const parts = [
+    `<p>Como <strong>${escapeHtml(s.asA || "usuário")}</strong>, quero ${escapeHtml(s.iWant)}${
+      s.soThat ? `, para ${escapeHtml(s.soThat)}` : ""
+    }.</p>`,
+    `<p><strong>Prioridade:</strong> ${escapeHtml(storyPriorityLabel(s.priority))}</p>`,
+  ];
+  if (includeCriteria && s.acceptanceCriteria.length > 0) {
+    parts.push(`<h3>Critérios de aceite</h3>${buildAcceptanceCriteriaHtml(s.acceptanceCriteria)}`);
+  }
+  parts.push(
+    `<hr/><p><em>Gerada a partir do PRD no discovery-app. Para alterar, edite lá e reenvie a Feature — mudanças feitas só aqui serão sobrescritas.</em></p>`
+  );
+  return parts.join("\n");
 }
