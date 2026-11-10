@@ -41,8 +41,15 @@ const PRIORITY_COLORS: Record<string, "red" | "amber" | "slate"> = {
   could: "slate",
 };
 
-export default async function ProductDocPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ProductDocPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ azureError?: string; azureOk?: string }>;
+}) {
   const { id } = await params;
+  const { azureError, azureOk } = await searchParams;
   const { project, role } = await getPageContext();
   const [opp] = await db.select().from(opportunities).where(eq(opportunities.id, id)).limit(1);
   if (!opp || opp.projectId !== project.id) notFound();
@@ -285,6 +292,16 @@ export default async function ProductDocPage({ params }: { params: Promise<{ id:
             )}
           </div>
           {!doc && <p className="mt-2 text-xs text-amber-700">Gere ou escreva o PRD acima antes de enviar.</p>}
+          {azureError && (
+            <p className="mt-2 rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-700">
+              Não foi possível enviar ao Azure DevOps: {azureError}
+            </p>
+          )}
+          {azureOk && !azureError && (
+            <p className="mt-2 rounded-md border border-emerald-200 bg-emerald-50 p-2 text-xs text-emerald-700">
+              Feature enviada ao Azure DevOps.
+            </p>
+          )}
         </Card>
       )}
 

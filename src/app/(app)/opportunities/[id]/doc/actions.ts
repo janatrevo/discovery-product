@@ -17,6 +17,7 @@ import { linesToArray } from "@/lib/list-utils";
 import { createFeature, updateFeature } from "@/lib/azure-devops";
 import { buildFeatureDescription } from "@/lib/azure-feature-description";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 
 async function loadOpportunity(opportunityId: string, projectId: string) {
   const [opp] = await db.select().from(opportunities).where(eq(opportunities.id, opportunityId)).limit(1);
@@ -171,45 +172,62 @@ export async function updateProductDoc(opportunityId: string, formData: FormData
 // do resto da integração com Azure DevOps (ver src/app/(app)/azure-devops/actions.ts).
 export async function sendToAzureDevOps(opportunityId: string) {
   const { project, role } = await getPageContext();
-  if (role !== "owner") throw new Error("Só administradores (Owner) podem enviar para o Azure DevOps.");
 
-  const opp = await loadOpportunity(opportunityId, project.id);
-  const [doc] = await db.select().from(productDocs).where(eq(productDocs.opportunityId, opportunityId)).limit(1);
-  if (!doc) throw new Error("Gere (ou escreva) o PRD desta oportunidade antes de enviar para o Azure DevOps.");
+  // Em produção o Next.js esconde a mensagem de qualquer erro lançado numa
+  // Server Action (a tela só mostra "500"). Por isso o motivo real é capturado
+  // aqui e devolvido na URL (?azureError=...), onde a página o exibe.
+  // O redirect() fica FORA do try/catch porque ele funciona lançando uma
+  // exceção especial que não pode ser engolida.
+  let errorMessage: string | null = null;
+  try {
+    if (role !== "owner") throw new Error("Só administradores (Owner) podem enviar para o Azure DevOps.");
 
-  const stories = await db
-    .select()
-    .from(userStories)
-    .where(eq(userStories.opportunityId, opportunityId))
-    .orderBy(asc(userStories.orderIndex));
+    const opp = await loadOpportunity(opportunityId, project.id);
+    const [doc] = await db.select().from(productDocs).where(eq(productDocs.opportunityId, opportunityId)).limit(1);
+    if (!doc) throw new Error("Gere (ou escreva) o PRD desta oportunidade antes de enviar para o Azure DevOps.");
 
-  const description = buildFeatureDescription({
-    opportunityTitle: opp.title,
-    opportunityDescription: opp.description ?? "",
-    problemRef: opp.problemRef,
-    goals: doc.goals as string[],
-    nonGoals: doc.nonGoals as string[],
-    openQuestions: doc.openQuestions as string[],
-    businessRules: doc.businessRules as string[],
-    successMetrics: doc.successMetrics as string[],
-    userStories: stories.map((s) => ({
-      asA: s.asA,
-      iWant: s.iWant,
-      soThat: s.soThat,
-      acceptanceCriteria: (s.acceptanceCriteria as string[]) ?? [],
-    })),
-  });
+    const stories = await db
+      .select()
+      .from(userStories)
+      .where(eq(userStories.opportunityId, opportunityId))
+      .orderBy(asc(userStories.orderIndex));
 
-  if (opp.azureFeatureId) {
-    await updateFeature(opp.azureFeatureId, { title: opp.title, description });
-  } else {
-    const created = await createFeature({ title: opp.title, description });
-    await db.update(opportunities).set({ azureFeatureId: created.id }).where(eq(opportunities.id, opportunityId));
+    const description = buildFeatureDescription({
+      opportunityTitle: opp.title,
+      opportunityDescription: opp.description ?? "",
+      problemRef: opp.problemRef,
+      goals: doc.goals as string[],
+      nonGoals: doc.nonGoals as string[],
+      openQuestions: doc.openQuestions as string[],
+      businessRules: doc.businessRules as string[],
+      successMetrics: doc.successMetrics as string[],
+      userStories: stories.map((s) => ({
+        asA: s.asA,
+        iWant: s.iWant,
+        soThat: s.soThat,
+        acceptanceCriteria: (s.acceptanceCriteria as string[]) ?? [],
+      })),
+    });
+
+    if (opp.azureFeatureId) {
+      await updateFeature(opp.azureFeatureId, { title: opp.title, description });
+    } else {
+      const created = await createFeature({ title: opp.title, description });
+      await db.update(opportunities).set({ azureFeatureId: created.id }).where(eq(opportunities.id, opportunityId));
+    }
+  } catch (e) {
+    errorMessage = e instanceof Error ? e.message : String(e);
+    console.error("[sendToAzureDevOps] falhou:", errorMessage);
   }
 
   revalidatePath(`/opportunities/${opportunityId}/doc`);
   revalidatePath(`/opportunities/${opportunityId}`);
   revalidatePath("/azure-devops");
+
+  if (errorMessage) {
+    redirect(`/opportunities/${opportunityId}/doc?azureError=${encodeURIComponent(errorMessage.slice(0, 500))}`);
+  }
+  redirect(`/opportunities/${opportunityId}/doc?azureOk=1`);
 }
 
 export async function markDocReviewed(opportunityId: string) {
