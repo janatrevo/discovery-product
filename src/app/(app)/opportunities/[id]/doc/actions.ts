@@ -14,8 +14,8 @@ import { eq, and, asc, sql } from "drizzle-orm";
 import { getPageContext } from "@/lib/page-context";
 import { draftProductDoc } from "@/lib/ai";
 import { linesToArray } from "@/lib/list-utils";
-import { createFeature, updateFeature, syncUserStories } from "@/lib/azure-devops";
-import { buildFeatureDescription } from "@/lib/azure-feature-description";
+import { createFeature, updateFeature, syncUserStories, getFeatureFieldRefs } from "@/lib/azure-devops";
+import { buildFeatureDescription, buildListHtml, buildFeatureAcceptanceHtml } from "@/lib/azure-feature-description";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -196,6 +196,20 @@ export async function sendToAzureDevOps(opportunityId: string) {
         .orderBy(asc(userStories.orderIndex))
     ).filter((s) => s.confirmed);
 
+    // Campos próprios da Feature no Azure (regras de negócio, critérios de
+    // aceite, métricas). Os que não existirem continuam dentro da Description.
+    const refs = await getFeatureFieldRefs();
+    const storiesForAzure = stories.map((s) => ({
+      asA: s.asA,
+      iWant: s.iWant,
+      soThat: s.soThat,
+      acceptanceCriteria: (s.acceptanceCriteria as string[]) ?? [],
+    }));
+    const fields: Record<string, string> = {};
+    if (refs.businessRules) fields[refs.businessRules] = buildListHtml(doc.businessRules as string[]);
+    if (refs.acceptanceCriteria) fields[refs.acceptanceCriteria] = buildFeatureAcceptanceHtml(storiesForAzure);
+    if (refs.successMetrics) fields[refs.successMetrics] = buildListHtml(doc.successMetrics as string[]);
+
     const description = buildFeatureDescription({
       opportunityTitle: opp.title,
       opportunityDescription: opp.description ?? "",
@@ -212,13 +226,18 @@ export async function sendToAzureDevOps(opportunityId: string) {
         acceptanceCriteria: (s.acceptanceCriteria as string[]) ?? [],
       })),
       storiesAsChildren: true,
+      inline: {
+        businessRules: !refs.businessRules,
+        acceptanceCriteria: !refs.acceptanceCriteria,
+        successMetrics: !refs.successMetrics,
+      },
     });
 
     let featureId = opp.azureFeatureId;
     if (featureId) {
-      await updateFeature(featureId, { title: opp.title, description });
+      await updateFeature(featureId, { title: opp.title, description, fields });
     } else {
-      const created = await createFeature({ title: opp.title, description });
+      const created = await createFeature({ title: opp.title, description, fields });
       featureId = created.id;
       // Grava o vínculo já aqui: se as stories falharem logo abaixo, um novo
       // envio reaproveita este card em vez de criar outro.

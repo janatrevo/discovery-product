@@ -210,7 +210,13 @@ export async function getFeatureStates(): Promise<{ name: string; category: stri
   return body.value || [];
 }
 
-export async function createFeature(input: { title: string; description?: string; tags?: string[] }) {
+export async function createFeature(input: {
+  title: string;
+  description?: string;
+  tags?: string[];
+  // Campos próprios da Feature (referenceName -> HTML), ex.: regras de negócio.
+  fields?: Record<string, string>;
+}) {
   assertConfigured();
   if (!input.title.trim()) throw new Error("Título é obrigatório.");
 
@@ -219,6 +225,9 @@ export async function createFeature(input: { title: string; description?: string
   ];
   if (input.description) ops.push({ op: "add", path: "/fields/System.Description", value: input.description });
   if (input.tags && input.tags.length > 0) ops.push({ op: "add", path: "/fields/System.Tags", value: input.tags.join("; ") });
+  for (const [ref, value] of Object.entries(input.fields ?? {})) {
+    if (value) ops.push({ op: "add", path: `/fields/${ref}`, value });
+  }
 
   const res = await fetch(`${baseUrl()}/workitems/$Feature?api-version=${API_VERSION}`, {
     method: "POST",
@@ -231,7 +240,7 @@ export async function createFeature(input: { title: string; description?: string
 
 export async function updateFeature(
   id: number,
-  input: { title?: string; description?: string; tags?: string[]; state?: string }
+  input: { title?: string; description?: string; tags?: string[]; state?: string; fields?: Record<string, string> }
 ) {
   assertConfigured();
   // getFeature já confere (internamente) que o id pertence ao projeto
@@ -245,6 +254,8 @@ export async function updateFeature(
     ops.push({ op: "add", path: "/fields/System.Description", value: input.description });
   if (input.tags !== undefined) ops.push({ op: "add", path: "/fields/System.Tags", value: input.tags.join("; ") });
   if (input.state !== undefined) ops.push({ op: "add", path: "/fields/System.State", value: input.state });
+  // No reenvio, campo vazio limpa o conteúdo antigo (para não sobrar texto desatualizado).
+  for (const [ref, value] of Object.entries(input.fields ?? {})) ops.push({ op: "add", path: `/fields/${ref}`, value });
 
   if (ops.length === 0) return getFeature(id);
 
@@ -443,4 +454,46 @@ export async function syncUserStories(featureId: number, stories: StoryForAzure[
     );
   }
   return { created, updated, typeName: type.name };
+}
+
+
+// ---------------------------------------------------------------------------
+// Campos próprios da Feature (Regras de negócio, Critérios de aceite, Métricas)
+// ---------------------------------------------------------------------------
+// O processo do projeto pode ter campos específicos para cada parte do PRD.
+// Procuramos pelo NOME que aparece na tela do Azure (em inglês ou português)
+// e usamos o nome interno (referenceName) que o Azure atribuiu. Se algum não
+// existir, a parte correspondente continua indo dentro da Description.
+
+export type FeatureFieldRefs = { businessRules?: string; acceptanceCriteria?: string; successMetrics?: string };
+
+function norm(text: string) {
+  return text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+const FIELD_NAMES: Record<keyof FeatureFieldRefs, string[]> = {
+  businessRules: ["business rules", "regras de negocio"],
+  acceptanceCriteria: ["acceptance criteria", "criterios de aceite"],
+  successMetrics: ["success metrics", "metricas de sucesso"],
+};
+
+let featureFieldRefsCache: FeatureFieldRefs | null = null;
+
+export async function getFeatureFieldRefs(): Promise<FeatureFieldRefs> {
+  if (featureFieldRefsCache) return featureFieldRefsCache;
+  assertConfigured();
+  const res = await fetch(`${baseUrl()}/workitemtypes/Feature/fields?api-version=${API_VERSION}`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(await parseErrorBody(res));
+  const fields: { name: string; referenceName: string }[] = (await res.json()).value ?? [];
+  const refs: FeatureFieldRefs = {};
+  for (const key of Object.keys(FIELD_NAMES) as (keyof FeatureFieldRefs)[]) {
+    const found = fields.find((f) => FIELD_NAMES[key].includes(norm(f.name)));
+    if (found) refs[key] = found.referenceName;
+  }
+  featureFieldRefsCache = refs;
+  return refs;
 }

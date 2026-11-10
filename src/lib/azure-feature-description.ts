@@ -38,7 +38,11 @@ export function buildFeatureDescription(input: {
   // Quando as stories são enviadas como itens filhos da Feature (cada uma com
   // seus critérios de aceite), não repetimos a lista delas aqui.
   storiesAsChildren?: boolean;
+  // Quando a Feature tem campo próprio para a parte, ela NÃO entra na
+  // Description (false). Sem campo próprio, entra aqui como seção (true).
+  inline?: { businessRules?: boolean; acceptanceCriteria?: boolean; successMetrics?: boolean };
 }) {
+  const inline = { businessRules: true, acceptanceCriteria: true, successMetrics: true, ...input.inline };
   const parts: string[] = [];
 
   if (input.opportunityDescription) {
@@ -68,16 +72,16 @@ export function buildFeatureDescription(input: {
     parts.push(`<h3>User Stories</h3><ul>${lis}</ul>`);
   }
 
-  parts.push(section("Business Rules", input.businessRules));
+  if (inline.businessRules) parts.push(section("Business Rules", input.businessRules));
 
   // Acceptance Criteria consolidado: junta o de todas as stories, sem
   // duplicar entradas idênticas.
   const allAcceptanceCriteria = Array.from(
     new Set(input.userStories.flatMap((s) => s.acceptanceCriteria).filter(Boolean))
   );
-  if (!input.storiesAsChildren) parts.push(section("Acceptance Criteria", allAcceptanceCriteria));
+  if (inline.acceptanceCriteria) parts.push(section("Acceptance Criteria", allAcceptanceCriteria));
 
-  parts.push(section("Success Metrics", input.successMetrics));
+  if (inline.successMetrics) parts.push(section("Success Metrics", input.successMetrics));
 
   parts.push(
     `<hr/><p><em>Gerado a partir do PRD no discovery-app (oportunidade "${escapeHtml(
@@ -136,4 +140,28 @@ export function buildStoryDescription(s: StoryForAzure, includeCriteria: boolean
     `<hr/><p><em>Gerada a partir do PRD no discovery-app. Para alterar, edite lá e reenvie a Feature — mudanças feitas só aqui serão sobrescritas.</em></p>`
   );
   return parts.join("\n");
+}
+
+
+// ---- Conteúdo dos campos próprios da Feature ----
+
+export function buildListHtml(items: string[] | undefined) {
+  const clean = (items ?? []).filter(Boolean);
+  if (clean.length === 0) return "";
+  return `<ul>${clean.map((i) => `<li>${escapeHtml(i)}</li>`).join("")}</ul>`;
+}
+
+// Critérios de aceite da Feature: os de cada user story, agrupados por story.
+export function buildFeatureAcceptanceHtml(
+  stories: { asA: string | null; iWant: string; acceptanceCriteria: string[] }[]
+) {
+  return stories
+    .filter((s) => s.acceptanceCriteria.some(Boolean))
+    .map(
+      (s) =>
+        `<p><strong>Como ${escapeHtml(s.asA || "usuário")}, quero ${escapeHtml(s.iWant)}</strong></p>${buildListHtml(
+          s.acceptanceCriteria
+        )}`
+    )
+    .join("");
 }
