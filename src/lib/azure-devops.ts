@@ -51,7 +51,25 @@ function authHeaders(extra: Record<string, string> = {}) {
 
 async function parseErrorBody(res: Response) {
   const body = await res.json().catch(() => ({}));
-  return body?.message || `Falha na chamada ao Azure DevOps (HTTP ${res.status}).`;
+  const base = body?.message || `Falha na chamada ao Azure DevOps (HTTP ${res.status}).`;
+  // 401/403/404 quase sempre são configuração (token, organização ou nome do
+  // projeto). Mostramos o que o servidor está usando — nunca o token em si,
+  // só o tamanho e se tem espaço ou quebra de linha sobrando — para dar para
+  // conferir contra o que está no Vercel e no Azure.
+  if (res.status === 401 || res.status === 403 || res.status === 404) {
+    const pat = PAT ?? "";
+    const sujo = pat !== pat.trim() || /["'\s]/.test(pat);
+    const dica =
+      res.status === 401
+        ? "O Azure não reconheceu o token. Confira: se o token não venceu, se foi criado na organização certa (ou em \"All accessible organizations\") e com a permissão Work Items → Read & write, e se o nome da organização está igual ao da URL do Azure."
+        : res.status === 403
+          ? "O token foi reconhecido mas não tem permissão. Crie outro com Work Items → Read & write."
+          : "Organização ou projeto não encontrados. Confira o nome na URL do Azure.";
+    return `${base} ${dica} [servidor usa: organização="${ORG}", projeto="${PROJECT}", token com ${pat.length} caracteres${
+      sujo ? " (ATENÇÃO: tem espaço, aspas ou quebra de linha)" : ""
+    }]`;
+  }
+  return base;
 }
 
 export type AzureFeature = {

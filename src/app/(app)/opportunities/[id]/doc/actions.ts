@@ -225,7 +225,7 @@ export async function sendToAzureDevOps(opportunityId: string) {
   revalidatePath("/azure-devops");
 
   if (errorMessage) {
-    redirect(`/opportunities/${opportunityId}/doc?azureError=${encodeURIComponent(errorMessage.slice(0, 500))}`);
+    redirect(`/opportunities/${opportunityId}/doc?azureError=${encodeURIComponent(errorMessage.slice(0, 900))}`);
   }
   redirect(`/opportunities/${opportunityId}/doc?azureOk=1`);
 }
