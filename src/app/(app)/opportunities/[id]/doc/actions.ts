@@ -337,3 +337,33 @@ export async function deleteUserStory(storyId: string) {
   await db.delete(userStories).where(eq(userStories.id, storyId));
   revalidatePath(`/opportunities`, "layout");
 }
+
+// Edita o texto de uma story já criada (papel, o que quer, para quê, critérios
+// de aceite e prioridade) sem precisar remover e criar de novo. Se a story já
+// foi enviada ao Azure DevOps, "Atualizar Feature" depois leva o novo texto
+// para o item de lá (o vínculo é pela tag discovery-story-<id>).
+export async function updateUserStory(storyId: string, formData: FormData) {
+  const { project, role } = await getPageContext();
+  if (role === "viewer") throw new Error("Sem permissão.");
+
+  const [story] = await db.select().from(userStories).where(eq(userStories.id, storyId)).limit(1);
+  if (!story) throw new Error("User story não encontrada.");
+  await loadOpportunity(story.opportunityId, project.id);
+
+  const iWant = String(formData.get("iWant") || "").trim();
+  if (!iWant) throw new Error("Descreva o que a story precisa entregar.");
+  const priority = String(formData.get("priority") || story.priority);
+
+  await db
+    .update(userStories)
+    .set({
+      asA: String(formData.get("asA") || "").trim() || "usuário",
+      iWant,
+      soThat: String(formData.get("soThat") || "").trim(),
+      acceptanceCriteria: linesToArray(formData.get("acceptanceCriteria")),
+      priority: (["must", "should", "could"].includes(priority) ? priority : story.priority) as never,
+    })
+    .where(eq(userStories.id, storyId));
+
+  revalidatePath(`/opportunities/${story.opportunityId}/doc`);
+}

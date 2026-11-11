@@ -27,6 +27,7 @@ import {
   confirmUserStory,
   toggleStoryDone,
   deleteUserStory,
+  updateUserStory,
   sendToAzureDevOps,
 } from "./actions";
 
@@ -210,6 +211,58 @@ export default async function ProductDocPage({
                       <li key={i}>{c}</li>
                     ))}
                   </ul>
+                )}
+                {canEdit && (
+                  <details className="group mt-2">
+                    <summary className="cursor-pointer text-xs text-indigo-600 hover:underline group-open:hidden">editar texto</summary>
+                    <form
+                      action={updateUserStory.bind(null, s.id)}
+                      className="grid grid-cols-1 gap-2 rounded-md bg-slate-50 p-3 sm:grid-cols-2"
+                    >
+                      <Field>
+                        <Label>Como (papel)</Label>
+                        <Input name="asA" defaultValue={s.asA ?? ""} />
+                      </Field>
+                      <Field>
+                        <Label>Prioridade</Label>
+                        <Select name="priority" defaultValue={s.priority}>
+                          <option value="must">Deve ter</option>
+                          <option value="should">Deveria ter</option>
+                          <option value="could">Poderia ter</option>
+                        </Select>
+                      </Field>
+                      <div className="sm:col-span-2">
+                        <Field>
+                          <Label>Eu quero</Label>
+                          <Textarea name="iWant" required rows={3} defaultValue={s.iWant} />
+                        </Field>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <Field>
+                          <Label>Para que</Label>
+                          <Textarea name="soThat" rows={2} defaultValue={s.soThat ?? ""} />
+                        </Field>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <Field>
+                          <Label>Critérios de aceite (um por linha)</Label>
+                          <Textarea
+                            name="acceptanceCriteria"
+                            rows={Math.min(10, Math.max(3, ((s.acceptanceCriteria as string[]) ?? []).length + 1))}
+                            defaultValue={arrayToLines((s.acceptanceCriteria as string[]) ?? [])}
+                          />
+                        </Field>
+                      </div>
+                      <div className="flex items-center gap-3 sm:col-span-2">
+                        <Button type="submit" size="sm">
+                          Salvar alterações
+                        </Button>
+                        <span className="text-xs text-slate-400">
+                          Se a Feature já foi enviada ao Azure DevOps, clique em &quot;Atualizar Feature&quot; para levar o novo texto.
+                        </span>
+                      </div>
+                    </form>
+                  </details>
                 )}
                 {canEdit && (
                   <div className="mt-2 flex flex-wrap gap-3 text-xs">
