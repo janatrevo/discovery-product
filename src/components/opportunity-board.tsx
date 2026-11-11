@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { Badge, Card } from "@/components/ui/primitives";
 import { Spinner } from "@/components/ui/button";
+import { tagColor } from "@/lib/tags";
 import {
   reorderOpportunities,
   moveOpportunityToColumn,
@@ -17,6 +18,7 @@ export type OpportunityCardData = {
   personaName?: string;
   priorityScore: string | null;
   evidenceConfidence: number;
+  tags?: string[];
 };
 
 export type OpportunityColumnDef = { value: string; label: string };
@@ -188,6 +190,15 @@ export function OpportunityBoard({
                             dragId === o.id ? "opacity-40" : ""
                           }`}
                         >
+                          {!!o.tags?.length && (
+                            <div className="mb-1.5 flex flex-wrap gap-1">
+                              {o.tags.map((t) => (
+                                <Badge key={t} color={tagColor(t)}>
+                                  {t}
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
                           <p className="text-sm font-medium text-slate-900">{o.title}</p>
                           {o.hypothesisTitle && <p className="mt-1 text-xs text-slate-400">Hipótese: {o.hypothesisTitle}</p>}
                           {o.personaName && <Badge color="indigo">{o.personaName}</Badge>}

@@ -6,9 +6,12 @@ import { eq, sql } from "drizzle-orm";
 import { getPageContext } from "@/lib/page-context";
 import { featureWebUrl } from "@/lib/azure-devops";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
+import { TagsInput } from "@/components/tags-input";
+import { tagColor } from "@/lib/tags";
 import { Badge, Button, Card, Field, Input, Label, PageHeader, Select, Textarea } from "@/components/ui/primitives";
 import {
   updateOpportunityScores,
+  updateOpportunityTags,
   updateOpportunityStatus,
   recordOpportunityOutcome,
   updatePlannedDates,
@@ -70,6 +73,9 @@ export default async function OpportunityDetailPage({
       : null,
   ]);
 
+  const tagRows = await db.select({ tags: opportunities.tags }).from(opportunities).where(eq(opportunities.projectId, project.id));
+  const knownTags = [...new Set(tagRows.flatMap((r) => r.tags ?? []))].sort((a, b) => a.localeCompare(b, "pt-BR", { numeric: true }));
+
   const canEdit = role !== "viewer";
   const canDelete = role === "owner" || role === "editor";
   const [{ storyCount }] = await db
@@ -118,6 +124,26 @@ export default async function OpportunityDetailPage({
           <div className="mt-3 flex flex-wrap gap-2">
             {hypothesis && <Badge color="indigo">Hipótese: {hypothesis.title}</Badge>}
             {persona && <Badge color="violet">{persona.name}</Badge>}
+          </div>
+          <div className="mt-4 border-t border-slate-100 pt-3">
+            <p className="mb-1 text-xs font-medium text-slate-500">Tags</p>
+            {role === "viewer" ? (
+              <div className="flex flex-wrap gap-2">
+                {(opp.tags ?? []).length === 0 && <span className="text-xs text-slate-400">Sem tags.</span>}
+                {(opp.tags ?? []).map((t) => (
+                  <Badge key={t} color={tagColor(t)}>
+                    {t}
+                  </Badge>
+                ))}
+              </div>
+            ) : (
+              <form action={updateOpportunityTags.bind(null, opp.id)} className="space-y-2">
+                <TagsInput initial={opp.tags ?? []} suggestions={knownTags} />
+                <Button type="submit" variant="secondary">
+                  Salvar tags
+                </Button>
+              </form>
+            )}
           </div>
         </Card>
         <Card>

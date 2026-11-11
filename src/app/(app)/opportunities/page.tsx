@@ -50,6 +50,7 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
         personaName: personaName(o.personaId),
         priorityScore: o.priorityScore,
         evidenceConfidence: o.evidenceConfidence ?? 0,
+        tags: o.tags ?? [],
       }));
   }
 

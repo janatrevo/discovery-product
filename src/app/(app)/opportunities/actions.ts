@@ -6,6 +6,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { checkOpportunityDeletable, deleteBlockedMessage } from "@/lib/delete-guards";
 import { getPageContext } from "@/lib/page-context";
 import { computePriorityScore } from "@/lib/priority-score";
+import { parseTags } from "@/lib/tags";
 import { recomputeHypothesis } from "@/lib/recompute-hypothesis";
 import { getFeature, updateFeature, withAbTag } from "@/lib/azure-devops";
 import { redirect } from "next/navigation";
@@ -70,6 +71,7 @@ export async function createOpportunity(formData: FormData) {
       evidenceConfidence: Math.round(evidenceConfidence),
       priorityScore: String(priorityScore),
       boardOrder: maxOrder + 1,
+      tags: parseTags(String(formData.get("tags") || "")),
       createdBy: user.id,
     })
     .returning();
@@ -179,6 +181,20 @@ export async function recordOpportunityOutcome(opportunityId: string, formData: 
   revalidatePath(`/opportunities/${opportunityId}`);
   revalidatePath("/dashboard");
   if (opp.hypothesisId) revalidatePath(`/hypotheses/${opp.hypothesisId}`);
+}
+
+export async function updateOpportunityTags(opportunityId: string, formData: FormData) {
+  const { project, role } = await getPageContext();
+  if (role === "viewer") throw new Error("Sem permissão.");
+
+  const tags = parseTags(String(formData.get("tags") || ""));
+  await db
+    .update(opportunities)
+    .set({ tags })
+    .where(and(eq(opportunities.id, opportunityId), eq(opportunities.projectId, project.id)));
+
+  revalidatePath(`/opportunities/${opportunityId}`);
+  revalidatePath("/opportunities");
 }
 
 export async function updateOpportunityScores(opportunityId: string, formData: FormData) {

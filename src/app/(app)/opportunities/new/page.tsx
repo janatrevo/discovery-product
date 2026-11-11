@@ -1,8 +1,9 @@
 import { getPageContext } from "@/lib/page-context";
 import { db } from "@/db";
-import { personas, hypotheses } from "@/db/schema";
+import { personas, hypotheses, opportunities } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { createOpportunity } from "../actions";
+import { TagsInput } from "@/components/tags-input";
 import { Button, Card, Field, Input, Label, PageHeader, Select, Textarea } from "@/components/ui/primitives";
 
 const SCORE_FIELDS = [
@@ -21,10 +22,12 @@ export default async function NewOpportunityPage({
   const { hypothesisId } = await searchParams;
   const { project } = await getPageContext();
 
-  const [personaList, hypothesisList] = await Promise.all([
+  const [personaList, hypothesisList, tagRows] = await Promise.all([
     db.select().from(personas).where(eq(personas.projectId, project.id)),
     db.select().from(hypotheses).where(eq(hypotheses.projectId, project.id)),
+    db.select({ tags: opportunities.tags }).from(opportunities).where(eq(opportunities.projectId, project.id)),
   ]);
+  const knownTags = [...new Set(tagRows.flatMap((r) => r.tags ?? []))].sort((a, b) => a.localeCompare(b, "pt-BR", { numeric: true }));
 
   return (
     <div className="max-w-2xl">
@@ -41,6 +44,10 @@ export default async function NewOpportunityPage({
           <Field>
             <Label>Descrição</Label>
             <Textarea name="description" rows={3} />
+          </Field>
+          <Field>
+            <Label>Tags (ex.: a fase da oportunidade)</Label>
+            <TagsInput suggestions={knownTags} />
           </Field>
           <Field>
             <Label>Referência do problema (obrigatório se nenhuma hipótese for selecionada abaixo)</Label>

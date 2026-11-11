@@ -877,6 +877,9 @@ export const opportunities = pgTable("opportunities", {
   // Escopo é a própria coluna; empates (todas começam em 0) caem no desempate
   // por priority_score desc, então nada muda até alguém arrastar um card.
   boardOrder: integer("board_order").default(0).notNull(),
+  // Tags livres da oportunidade (ex.: "Fase 1", "Mensageria"): aparecem nos cards do
+  // Discovery Board e são editáveis no cadastro e no detalhe da oportunidade.
+  tags: text("tags").array().notNull().default(sql`'{}'::text[]`),
   plannedStartDate: timestamp("planned_start_date", { withTimezone: true }),
   plannedEndDate: timestamp("planned_end_date", { withTimezone: true }),
   abTestDecision: abTestDecisionEnum("ab_test_decision").notNull().default("testing"),
