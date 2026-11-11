@@ -872,6 +872,11 @@ export const opportunities = pgTable("opportunities", {
   // discovery-app, não campos nativos do Azure DevOps (evita depender de
   // Start Date/Target Date existirem no processo configurado lá).
   azureFeatureId: integer("azure_feature_id"),
+  // Posição manual no Discovery Board (arrastar e soltar, ver
+  // opportunity-board.tsx) — quanto menor, mais acima na coluna do status.
+  // Escopo é a própria coluna; empates (todas começam em 0) caem no desempate
+  // por priority_score desc, então nada muda até alguém arrastar um card.
+  boardOrder: integer("board_order").default(0).notNull(),
   plannedStartDate: timestamp("planned_start_date", { withTimezone: true }),
   plannedEndDate: timestamp("planned_end_date", { withTimezone: true }),
   abTestDecision: abTestDecisionEnum("ab_test_decision").notNull().default("testing"),

@@ -1,10 +1,11 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { db } from "@/db";
-import { opportunities, personas, hypotheses } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { opportunities, personas, hypotheses, userStories } from "@/db/schema";
+import { eq, sql } from "drizzle-orm";
 import { getPageContext } from "@/lib/page-context";
 import { featureWebUrl } from "@/lib/azure-devops";
+import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { Badge, Button, Card, Field, Input, Label, PageHeader, Select, Textarea } from "@/components/ui/primitives";
 import {
   updateOpportunityScores,
@@ -12,6 +13,7 @@ import {
   recordOpportunityOutcome,
   updatePlannedDates,
   setAbTestDecision,
+  deleteOpportunity,
 } from "../actions";
 
 const AB_DECISION_LABELS: Record<string, string> = {
@@ -48,8 +50,15 @@ const SCORE_FIELDS = [
   { name: "solutionEase", label: "Facilidade de solução" },
 ] as const;
 
-export default async function OpportunityDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function OpportunityDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ erro?: string }>;
+}) {
   const { id } = await params;
+  const { erro } = await searchParams;
   const { project, role } = await getPageContext();
   const [opp] = await db.select().from(opportunities).where(eq(opportunities.id, id)).limit(1);
   if (!opp || opp.projectId !== project.id) notFound();
@@ -62,6 +71,18 @@ export default async function OpportunityDetailPage({ params }: { params: Promis
   ]);
 
   const canEdit = role !== "viewer";
+  const canDelete = role === "owner" || role === "editor";
+  const [{ storyCount }] = await db
+    .select({ storyCount: sql<number>`count(*)::int` })
+    .from(userStories)
+    .where(eq(userStories.opportunityId, opp.id));
+  const deleteMessage =
+    `Excluir a oportunidade "${opp.title}"?\n\n` +
+    `Serão APAGADOS junto: o PRD e ${storyCount} user ${storyCount === 1 ? "story" : "stories"} dela.\n` +
+    (opp.azureFeatureId
+      ? `Ela já foi enviada ao Azure DevOps (Feature #${opp.azureFeatureId}): a Feature de lá NÃO é apagada, apague no Azure.\n`
+      : "") +
+    `\nEssa ação não pode ser desfeita.`;
 
   return (
     <div className="max-w-3xl space-y-4">
@@ -76,9 +97,20 @@ export default async function OpportunityDetailPage({ params }: { params: Promis
             <Link href={`/decisions/new?opportunityId=${opp.id}`}>
               <Button variant="secondary">Registrar decisão a partir desta oportunidade</Button>
             </Link>
+            {canDelete && (
+              <form action={deleteOpportunity.bind(null, opp.id)}>
+                <ConfirmSubmitButton message={deleteMessage}>Excluir</ConfirmSubmitButton>
+              </form>
+            )}
           </>
         }
       />
+
+      {erro && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+          Não foi possível excluir: {erro}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <Card className="md:col-span-2">

@@ -1,8 +1,9 @@
 "use server";
 
 import { db } from "@/db";
-import { opportunities, hypotheses, evidence, hypothesisEvidence } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { opportunities, hypotheses, evidence, hypothesisEvidence, productDocs, userStories } from "@/db/schema";
+import { and, eq, inArray, sql } from "drizzle-orm";
+import { checkOpportunityDeletable, deleteBlockedMessage } from "@/lib/delete-guards";
 import { getPageContext } from "@/lib/page-context";
 import { computePriorityScore } from "@/lib/priority-score";
 import { recomputeHypothesis } from "@/lib/recompute-hypothesis";
@@ -50,6 +51,12 @@ export async function createOpportunity(formData: FormData) {
 
   const priorityScore = computePriorityScore({ ...scores, evidenceConfidence });
 
+  // Nova oportunidade entra no fim da fila do Discovery Board (depois das que já foram ordenadas à mão).
+  const [{ maxOrder }] = await db
+    .select({ maxOrder: sql<number>`coalesce(max(${opportunities.boardOrder}), -1)::int` })
+    .from(opportunities)
+    .where(eq(opportunities.projectId, project.id));
+
   const [created] = await db
     .insert(opportunities)
     .values({
@@ -62,6 +69,7 @@ export async function createOpportunity(formData: FormData) {
       ...scores,
       evidenceConfidence: Math.round(evidenceConfidence),
       priorityScore: String(priorityScore),
+      boardOrder: maxOrder + 1,
       createdBy: user.id,
     })
     .returning();
@@ -94,28 +102,31 @@ export async function unlinkHypothesisFromOpportunity(opportunityId: string, hyp
   revalidatePath(`/hypotheses/${hypothesisId}`);
 }
 
-export async function updateOpportunityStatus(opportunityId: string, formData: FormData) {
-  const { role } = await getPageContext();
-  if (role === "viewer") throw new Error("Sem permissão.");
-  const status = String(formData.get("status") || "new") as never;
-
-  const [existing] = await db.select().from(opportunities).where(eq(opportunities.id, opportunityId)).limit(1);
-
-  // Marca quando a oportunidade virou "done" — é o gatilho do ciclo de
-  // acompanhamento pós-lançamento (ver checkForOutcomeFollowUps no
-  // dashboard). Se ela sair de "done" de novo, limpa tudo: o
-  // acompanhamento não faz sentido para algo que não está mais concluído.
+// Campos a gravar ao mudar o status. Marca quando a oportunidade virou "done"
+// — é o gatilho do ciclo de acompanhamento pós-lançamento (ver
+// checkForOutcomeFollowUps no dashboard). Se ela sair de "done" de novo, limpa
+// tudo: o acompanhamento não faz sentido para algo que não está mais concluído.
+function statusUpdates(previous: string | undefined, status: string): Record<string, unknown> {
   const updates: Record<string, unknown> = { status };
-  if (status === "done" && existing?.status !== "done") {
+  if (status === "done" && previous !== "done") {
     updates.doneAt = new Date();
-  } else if (status !== "done" && existing?.status === "done") {
+  } else if (status !== "done" && previous === "done") {
     updates.doneAt = null;
     updates.outcomeCheckedAt = null;
     updates.outcomeSummary = null;
     updates.outcomeEvidenceId = null;
   }
+  return updates;
+}
 
-  await db.update(opportunities).set(updates).where(eq(opportunities.id, opportunityId));
+export async function updateOpportunityStatus(opportunityId: string, formData: FormData) {
+  const { role } = await getPageContext();
+  if (role === "viewer") throw new Error("Sem permissão.");
+  const status = String(formData.get("status") || "new");
+
+  const [existing] = await db.select().from(opportunities).where(eq(opportunities.id, opportunityId)).limit(1);
+
+  await db.update(opportunities).set(statusUpdates(existing?.status, status) as never).where(eq(opportunities.id, opportunityId));
   revalidatePath("/opportunities", "layout");
   revalidatePath("/dashboard");
 }
@@ -241,4 +252,101 @@ export async function setAbTestDecision(opportunityId: string, formData: FormDat
   revalidatePath(`/opportunities/${opportunityId}`);
   revalidatePath("/azure-devops");
   revalidatePath("/azure-devops/roadmap");
+}
+
+const BOARD_STATUSES = ["new", "prioritized", "in_progress", "done", "archived"];
+
+// ---------------------------------------------------------------------------
+// Excluir oportunidade. O PRD e TODAS as user stories dela são apagados junto
+// (tudo numa transação). Só bloqueia se houver decisão registrada ligada a ela
+// (Decision Log é histórico). A Feature já criada no Azure DevOps NÃO é
+// apagada daqui — isso é feito lá (ou em /azure-devops).
+// ---------------------------------------------------------------------------
+async function performOpportunityDeletion(opportunityId: string) {
+  const { project, role } = await getPageContext();
+  if (role !== "owner" && role !== "editor") throw new Error("Sem permissão para excluir.");
+
+  const [opp] = await db.select().from(opportunities).where(eq(opportunities.id, opportunityId)).limit(1);
+  if (!opp || opp.projectId !== project.id) throw new Error("Oportunidade não encontrada.");
+
+  const reasons = await checkOpportunityDeletable(opportunityId);
+  if (reasons.length > 0) throw new Error(deleteBlockedMessage("esta oportunidade", reasons));
+
+  await db.transaction(async (tx) => {
+    // O banco já apaga em cascata; fazemos explícito para não depender disso.
+    await tx.delete(userStories).where(eq(userStories.opportunityId, opportunityId));
+    await tx.delete(productDocs).where(eq(productDocs.opportunityId, opportunityId));
+    await tx.delete(opportunities).where(eq(opportunities.id, opportunityId));
+  });
+
+  revalidatePath("/opportunities", "layout");
+  revalidatePath("/dashboard");
+  revalidatePath("/azure-devops");
+  revalidatePath("/azure-devops/roadmap");
+}
+
+// Botão "Excluir" da página da oportunidade. Em caso de erro, volta para a
+// própria página mostrando o motivo (em produção o Next esconde mensagens de
+// erro de Server Action, por isso o redirect com ?erro=).
+export async function deleteOpportunity(opportunityId: string) {
+  try {
+    await performOpportunityDeletion(opportunityId);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Não foi possível excluir a oportunidade.";
+    redirect(`/opportunities/${opportunityId}?erro=${encodeURIComponent(msg)}`);
+  }
+  redirect("/opportunities");
+}
+
+// Botão "excluir" direto no card do board: devolve o resultado em vez de
+// lançar erro, para a tela mostrar o motivo.
+export async function deleteOpportunityFromList(opportunityId: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await performOpportunityDeletion(opportunityId);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Não foi possível excluir a oportunidade." };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Ordem manual no Discovery Board (arrastar e soltar).
+// ---------------------------------------------------------------------------
+// Regrava boardOrder = índice na lista, só para ids do projeto atual.
+async function applyBoardOrder(projectId: string, orderedIds: string[]) {
+  if (orderedIds.length === 0) return;
+  const owned = await db
+    .select({ id: opportunities.id })
+    .from(opportunities)
+    .where(and(inArray(opportunities.id, orderedIds), eq(opportunities.projectId, projectId)));
+  const ownedIds = new Set(owned.map((o) => o.id));
+  await Promise.all(
+    orderedIds
+      .map((id, index) => ({ id, index }))
+      .filter(({ id }) => ownedIds.has(id))
+      .map(({ id, index }) => db.update(opportunities).set({ boardOrder: index }).where(eq(opportunities.id, id)))
+  );
+}
+
+// Soltar dentro da mesma coluna: só muda a ordem (topo = mais prioritário).
+export async function reorderOpportunities(orderedIds: string[]) {
+  const { project, role } = await getPageContext();
+  if (role === "viewer") throw new Error("Viewers não podem reordenar oportunidades.");
+  await applyBoardOrder(project.id, orderedIds);
+  revalidatePath("/opportunities");
+}
+
+// Soltar em outra coluna: muda o status e grava a ordem da coluna de destino.
+export async function moveOpportunityToColumn(opportunityId: string, newStatus: string, orderedIds: string[]) {
+  const { project, role } = await getPageContext();
+  if (role === "viewer") throw new Error("Viewers não podem mover oportunidades.");
+  if (!BOARD_STATUSES.includes(newStatus)) throw new Error("Coluna inválida.");
+
+  const [existing] = await db.select().from(opportunities).where(eq(opportunities.id, opportunityId)).limit(1);
+  if (!existing || existing.projectId !== project.id) throw new Error("Oportunidade não encontrada.");
+
+  await db.update(opportunities).set(statusUpdates(existing.status, newStatus) as never).where(eq(opportunities.id, opportunityId));
+  await applyBoardOrder(project.id, orderedIds);
+  revalidatePath("/opportunities", "layout");
+  revalidatePath("/dashboard");
 }

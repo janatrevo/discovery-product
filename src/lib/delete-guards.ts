@@ -54,6 +54,17 @@ export async function checkHypothesisDeletable(hypothesisId: string): Promise<st
   return reasons;
 }
 
+// Oportunidade: o PRD e as user stories são apagados junto (cascata no banco).
+// A ÚNICA coisa que bloqueia é o Decision Log: decisão registrada é histórico
+// e nunca fica com referência quebrada.
+export async function checkOpportunityDeletable(opportunityId: string): Promise<string[]> {
+  const rows = await db.select({ id: decisions.id }).from(decisions).where(eq(decisions.opportunityId, opportunityId));
+  if (rows.length === 0) return [];
+  return [
+    `${rows.length} decisão(ões) já registrada(s) está(ão) ligada(s) a esta oportunidade — para preservar o histórico, ela não pode ser apagada`,
+  ];
+}
+
 export async function checkPersonaDeletable(personaId: string): Promise<string[]> {
   const reasons: string[] = [];
 
