@@ -15,7 +15,7 @@ export type EvidenceForScoring = {
   personaMatchesHypothesis: boolean;
 };
 
-const METHOD_WEIGHT: Record<string, number> = {
+export const METHOD_WEIGHT: Record<string, number> = {
   behavioral: 1.0,
   experiment: 0.9,
   usability_test: 0.85,
