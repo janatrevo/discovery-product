@@ -19,6 +19,10 @@ function escapeHtml(text: string) {
     .replace(/>/g, "&gt;");
 }
 
+function escapeAttr(text: string) {
+  return escapeHtml(text).replace(/"/g, "&quot;");
+}
+
 function section(title: string, items: string[] | undefined) {
   if (!items || items.length === 0) return "";
   const lis = items.map((i) => `<li>${escapeHtml(i)}</li>`).join("");
@@ -34,6 +38,8 @@ export function buildFeatureDescription(input: {
   openQuestions?: string[];
   businessRules?: string[];
   successMetrics?: string[];
+  // Imagens de apoio (fluxogramas): já anexadas ao Azure; url é a do anexo.
+  images?: { url: string; title: string }[];
   userStories: { asA: string | null; iWant: string; soThat: string | null; acceptanceCriteria: string[] }[];
   // Quando as stories são enviadas como itens filhos da Feature (cada uma com
   // seus critérios de aceite), não repetimos a lista delas aqui.
@@ -50,6 +56,16 @@ export function buildFeatureDescription(input: {
   }
   if (input.problemRef) {
     parts.push(`<p><strong>Problema observado:</strong> ${escapeHtml(input.problemRef)}</p>`);
+  }
+
+  if (input.images && input.images.length > 0) {
+    const blocks = input.images
+      .map(
+        (img) =>
+          `<p><strong>${escapeHtml(img.title)}</strong></p><p><img src="${escapeAttr(img.url)}" alt="${escapeAttr(img.title)}" /></p>`
+      )
+      .join("");
+    parts.push(`<h3>Fluxos e imagens de apoio</h3>${blocks}`);
   }
 
   parts.push(section("Objetivos", input.goals));

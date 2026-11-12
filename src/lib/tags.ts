@@ -26,3 +26,22 @@ export function tagColor(tag: string): "slate" | "emerald" | "sky" | "violet" | 
   if (!m) return "slate";
   return PHASE_COLORS[Number(m[1]) % PHASE_COLORS.length];
 }
+
+// Tags do card no Azure DevOps depois de um envio: parte das tags que já estão no
+// card, tira só as que este app tinha levado antes e que foram removidas aqui, e
+// acrescenta as tags atuais da oportunidade. O que foi criado direto no Azure
+// (ex.: ab:manter, discovery-*) nunca é removido. Compara sem diferenciar maiúsculas.
+export function mergeAzureTags(azureTags: string[], appTags: string[], previouslySynced: string[]): string[] {
+  const key = (t: string) => t.trim().toLocaleLowerCase("pt-BR");
+  const current = new Set(appTags.map(key));
+  const dropped = new Set(previouslySynced.map(key).filter((k) => !current.has(k)));
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const t of [...azureTags, ...appTags]) {
+    const k = key(t);
+    if (!k || seen.has(k) || dropped.has(k)) continue;
+    seen.add(k);
+    out.push(t.trim());
+  }
+  return out;
+}

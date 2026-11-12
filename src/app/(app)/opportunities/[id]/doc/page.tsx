@@ -2,7 +2,7 @@ import { SubmitLink } from "@/components/ui/button";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/db";
-import { opportunities, productDocs, userStories, hypotheses } from "@/db/schema";
+import { opportunities, productDocs, userStories, hypotheses, opportunityImages } from "@/db/schema";
 import { eq, asc } from "drizzle-orm";
 import { getPageContext } from "@/lib/page-context";
 import { isAiEnabled } from "@/lib/ai";
@@ -18,6 +18,7 @@ import {
   Textarea,
 } from "@/components/ui/primitives";
 import { arrayToLines } from "@/lib/list-utils";
+import { ImageUploader } from "@/components/image-uploader";
 import { featureWebUrl } from "@/lib/azure-devops";
 import {
   generateProductDoc,
@@ -29,6 +30,9 @@ import {
   deleteUserStory,
   updateUserStory,
   sendToAzureDevOps,
+  updateOpportunityImageTitle,
+  moveOpportunityImage,
+  deleteOpportunityImage,
 } from "./actions";
 
 const PRIORITY_LABELS: Record<string, string> = {
@@ -60,10 +64,22 @@ export default async function ProductDocPage({
   const [opp] = await db.select().from(opportunities).where(eq(opportunities.id, id)).limit(1);
   if (!opp || opp.projectId !== project.id) notFound();
 
-  const [doc, stories, hypothesis] = await Promise.all([
+  const [doc, stories, hypothesis, images] = await Promise.all([
     db.select().from(productDocs).where(eq(productDocs.opportunityId, id)).limit(1).then((r) => r[0]),
     db.select().from(userStories).where(eq(userStories.opportunityId, id)).orderBy(asc(userStories.orderIndex)),
     opp.hypothesisId ? db.select().from(hypotheses).where(eq(hypotheses.id, opp.hypothesisId)).limit(1).then((r) => r[0]) : null,
+    // Sem a coluna data: o conteúdo da imagem só é lido na hora de exibir ou enviar.
+    db
+      .select({
+        id: opportunityImages.id,
+        title: opportunityImages.title,
+        fileName: opportunityImages.fileName,
+        sizeBytes: opportunityImages.sizeBytes,
+        azureFeatureId: opportunityImages.azureFeatureId,
+      })
+      .from(opportunityImages)
+      .where(eq(opportunityImages.opportunityId, id))
+      .orderBy(asc(opportunityImages.orderIndex), asc(opportunityImages.createdAt)),
   ]);
 
   const canEdit = role !== "viewer";
@@ -327,13 +343,74 @@ export default async function ProductDocPage({
         )}
       </Card>
 
+      <Card>
+        <p className="mb-1 text-sm font-semibold text-slate-700">Fluxos e imagens de apoio ({images.length})</p>
+        <p className="mb-3 text-xs text-slate-500">
+          Fluxogramas e outras imagens que ajudam o time de tecnologia a entender o escopo. Ao enviar a Feature ao Azure
+          DevOps, cada imagem é anexada ao card e aparece dentro da Description, na ordem abaixo.
+        </p>
+        {images.length === 0 ? (
+          <p className="mb-3 text-sm text-slate-400">Nenhuma imagem ainda.</p>
+        ) : (
+          <ul className="mb-4 space-y-3">
+            {images.map((img, i) => (
+              <li key={img.id} className="rounded-md border border-slate-100 p-3">
+                <a href={`/api/opportunity-images/${img.id}`} target="_blank" rel="noreferrer" className="block">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={`/api/opportunity-images/${img.id}`}
+                    alt={img.title}
+                    className="max-h-72 max-w-full rounded border border-slate-200 bg-white object-contain"
+                  />
+                </a>
+                <p className="mt-2 text-xs text-slate-400">
+                  {img.fileName} · {(img.sizeBytes / 1000).toFixed(0)} KB ·{" "}
+                  {opp.azureFeatureId && img.azureFeatureId === opp.azureFeatureId
+                    ? "já anexada ao card do Azure"
+                    : "ainda não enviada ao Azure"}
+                </p>
+                {canEdit ? (
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <form action={updateOpportunityImageTitle.bind(null, img.id)} className="flex min-w-0 flex-1 items-center gap-2">
+                      <Input name="title" defaultValue={img.title} required maxLength={160} aria-label="Legenda da imagem" />
+                      <Button type="submit" size="sm" variant="secondary">
+                        Salvar legenda
+                      </Button>
+                    </form>
+                    <div className="flex gap-3 text-xs">
+                      {i > 0 && (
+                        <form action={moveOpportunityImage.bind(null, img.id, "up")}>
+                          <SubmitLink className="text-indigo-600 hover:underline">subir</SubmitLink>
+                        </form>
+                      )}
+                      {i < images.length - 1 && (
+                        <form action={moveOpportunityImage.bind(null, img.id, "down")}>
+                          <SubmitLink className="text-indigo-600 hover:underline">descer</SubmitLink>
+                        </form>
+                      )}
+                      <form action={deleteOpportunityImage.bind(null, img.id)}>
+                        <SubmitLink className="text-red-500 hover:underline">remover</SubmitLink>
+                      </form>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="mt-1 text-sm text-slate-700">{img.title}</p>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+        {canEdit && <ImageUploader opportunityId={id} />}
+      </Card>
+
       {role === "owner" && (
         <Card>
           <p className="mb-1 text-sm font-semibold text-slate-700">Azure DevOps</p>
           <p className="mb-3 text-xs text-slate-500">
             Cria (ou atualiza) um card Feature no board Trevo One com este PRD — Description recebe o
             contexto, objetivos, regras de negócio e métricas — e cada user story confirmada vira um item
-            filho da Feature, com os critérios de aceite. Reenviar atualiza, sem duplicar.
+            filho da Feature, com os critérios de aceite. As imagens de apoio vão anexadas ao card e dentro da
+            Description, e as tags da oportunidade viram tags do card. Reenviar atualiza, sem duplicar.
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <form action={sendToAzureDevOps.bind(null, id)}>

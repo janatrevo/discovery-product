@@ -210,17 +210,47 @@ export async function getFeatureStates(): Promise<{ name: string; category: stri
   return body.value || [];
 }
 
+// ---------- Anexos (imagens dos fluxos) ----------
+// Envio de arquivo: POST {org}/{project}/_apis/wit/attachments?fileName=... com o
+// conteúdo bruto (application/octet-stream). A resposta traz { id, url }; essa url
+// serve tanto para ligar o arquivo ao card (relação AttachedFile) quanto para
+// aparecer como imagem dentro da Description (<img src=url>).
+export type AzureAttachment = { url: string; comment?: string };
+
+export async function uploadAttachment(fileName: string, bytes: Uint8Array): Promise<{ id: string; url: string }> {
+  assertConfigured();
+  const res = await fetch(`${baseUrl()}/attachments?fileName=${encodeURIComponent(fileName)}&api-version=${API_VERSION}`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/octet-stream" }),
+    body: bytes as unknown as BodyInit,
+  });
+  if (!res.ok) throw new Error(await parseErrorBody(res));
+  const body = await res.json();
+  if (!body?.url) throw new Error("O Azure DevOps recebeu o arquivo mas não devolveu o endereço do anexo.");
+  return { id: body.id as string, url: body.url as string };
+}
+
+function attachmentRelationOp(a: AzureAttachment) {
+  return {
+    op: "add",
+    path: "/relations/-",
+    value: { rel: "AttachedFile", url: a.url, attributes: { comment: a.comment ?? "" } },
+  };
+}
+
 export async function createFeature(input: {
   title: string;
   description?: string;
   tags?: string[];
   // Campos próprios da Feature (referenceName -> HTML), ex.: regras de negócio.
   fields?: Record<string, string>;
+  // Anexos já enviados (ver uploadAttachment) a ligar ao card.
+  attachments?: AzureAttachment[];
 }) {
   assertConfigured();
   if (!input.title.trim()) throw new Error("Título é obrigatório.");
 
-  const ops: { op: string; path: string; value: string }[] = [
+  const ops: { op: string; path: string; value: unknown }[] = [
     { op: "add", path: "/fields/System.Title", value: input.title.trim() },
   ];
   if (input.description) ops.push({ op: "add", path: "/fields/System.Description", value: input.description });
@@ -228,6 +258,7 @@ export async function createFeature(input: {
   for (const [ref, value] of Object.entries(input.fields ?? {})) {
     if (value) ops.push({ op: "add", path: `/fields/${ref}`, value });
   }
+  for (const a of input.attachments ?? []) ops.push(attachmentRelationOp(a));
 
   const res = await fetch(`${baseUrl()}/workitems/$Feature?api-version=${API_VERSION}`, {
     method: "POST",
@@ -240,7 +271,14 @@ export async function createFeature(input: {
 
 export async function updateFeature(
   id: number,
-  input: { title?: string; description?: string; tags?: string[]; state?: string; fields?: Record<string, string> }
+  input: {
+    title?: string;
+    description?: string;
+    tags?: string[];
+    state?: string;
+    fields?: Record<string, string>;
+    attachments?: AzureAttachment[];
+  }
 ) {
   assertConfigured();
   // getFeature já confere (internamente) que o id pertence ao projeto
@@ -248,7 +286,7 @@ export async function updateFeature(
   // pra isso, sem precisar duplicar a checagem.
   await getFeature(id);
 
-  const ops: { op: string; path: string; value: string }[] = [];
+  const ops: { op: string; path: string; value: unknown }[] = [];
   if (input.title !== undefined) ops.push({ op: "add", path: "/fields/System.Title", value: input.title.trim() });
   if (input.description !== undefined)
     ops.push({ op: "add", path: "/fields/System.Description", value: input.description });
@@ -256,6 +294,7 @@ export async function updateFeature(
   if (input.state !== undefined) ops.push({ op: "add", path: "/fields/System.State", value: input.state });
   // No reenvio, campo vazio limpa o conteúdo antigo (para não sobrar texto desatualizado).
   for (const [ref, value] of Object.entries(input.fields ?? {})) ops.push({ op: "add", path: `/fields/${ref}`, value });
+  for (const a of input.attachments ?? []) ops.push(attachmentRelationOp(a));
 
   if (ops.length === 0) return getFeature(id);
 

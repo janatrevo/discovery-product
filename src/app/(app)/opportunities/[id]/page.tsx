@@ -142,6 +142,11 @@ export default async function OpportunityDetailPage({
                 <Button type="submit" variant="secondary">
                   Salvar tags
                 </Button>
+                {opp.azureFeatureId && (
+                  <p className="text-xs text-slate-400">
+                    As tags vão para o card do Azure DevOps quando você clicar em &quot;Atualizar Feature&quot; (tela do PRD).
+                  </p>
+                )}
               </form>
             )}
           </div>

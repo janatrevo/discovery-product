@@ -21,11 +21,18 @@ import {
   jsonb,
   pgEnum,
   primaryKey,
+  customType,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
 const id = () => uuid("id").primaryKey().defaultRandom();
+// bytea: conteúdo binário (usado nas imagens dos fluxos das oportunidades).
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType() {
+    return "bytea";
+  },
+});
 const createdAt = () => timestamp("created_at", { withTimezone: true }).defaultNow().notNull();
 
 // ---------- Enums ----------
@@ -880,6 +887,10 @@ export const opportunities = pgTable("opportunities", {
   // Tags livres da oportunidade (ex.: "Fase 1", "Mensageria"): aparecem nos cards do
   // Discovery Board e são editáveis no cadastro e no detalhe da oportunidade.
   tags: text("tags").array().notNull().default(sql`'{}'::text[]`),
+  // Tags que este app já levou ao card do Azure DevOps (ver sendToAzureDevOps).
+  // Serve para, no reenvio, retirar do card só as tags que foram removidas aqui,
+  // sem tocar nas que foram criadas direto no Azure (ex.: ab:manter).
+  azureSyncedTags: text("azure_synced_tags").array().notNull().default(sql`'{}'::text[]`),
   plannedStartDate: timestamp("planned_start_date", { withTimezone: true }),
   plannedEndDate: timestamp("planned_end_date", { withTimezone: true }),
   abTestDecision: abTestDecisionEnum("ab_test_decision").notNull().default("testing"),
@@ -917,6 +928,27 @@ export const productDocs = pgTable("product_docs", {
   createdBy: uuid("created_by").references(() => users.id),
   createdAt: createdAt(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Imagens de apoio da oportunidade (ex.: fluxogramas do processo). Ficam no banco
+// e, ao enviar a Feature, vão ao Azure DevOps como anexo e como imagem dentro da
+// Description. azureFeatureId/azureUrl lembram o que já foi anexado em qual card,
+// para não anexar de novo a cada "Atualizar Feature".
+export const opportunityImages = pgTable("opportunity_images", {
+  id: id(),
+  opportunityId: uuid("opportunity_id")
+    .references(() => opportunities.id, { onDelete: "cascade" })
+    .notNull(),
+  title: varchar("title", { length: 160 }).notNull(),
+  fileName: varchar("file_name", { length: 200 }).notNull(),
+  mimeType: varchar("mime_type", { length: 60 }).notNull(),
+  sizeBytes: integer("size_bytes").notNull(),
+  data: bytea("data").notNull(),
+  orderIndex: integer("order_index").notNull().default(0),
+  azureFeatureId: integer("azure_feature_id"),
+  azureUrl: text("azure_url"),
+  createdBy: uuid("created_by").references(() => users.id),
+  createdAt: createdAt(),
 });
 
 export const userStories = pgTable("user_stories", {

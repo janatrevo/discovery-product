@@ -9,12 +9,22 @@ import {
   personas,
   evidence,
   hypothesisEvidence,
+  opportunityImages,
 } from "@/db/schema";
-import { eq, and, asc, sql } from "drizzle-orm";
+import { eq, and, asc, sql, inArray } from "drizzle-orm";
 import { getPageContext } from "@/lib/page-context";
 import { draftProductDoc } from "@/lib/ai";
 import { linesToArray } from "@/lib/list-utils";
-import { createFeature, updateFeature, syncUserStories, getFeatureFieldRefs } from "@/lib/azure-devops";
+import {
+  createFeature,
+  updateFeature,
+  getFeature,
+  syncUserStories,
+  getFeatureFieldRefs,
+  uploadAttachment,
+  type AzureAttachment,
+} from "@/lib/azure-devops";
+import { mergeAzureTags } from "@/lib/tags";
 import { buildFeatureDescription, buildListHtml, buildFeatureAcceptanceHtml } from "@/lib/azure-feature-description";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -210,7 +220,29 @@ export async function sendToAzureDevOps(opportunityId: string) {
     if (refs.acceptanceCriteria) fields[refs.acceptanceCriteria] = buildFeatureAcceptanceHtml(storiesForAzure);
     if (refs.successMetrics) fields[refs.successMetrics] = buildListHtml(doc.successMetrics as string[]);
 
+    // Imagens de apoio (fluxogramas): sobe ao Azure só as que ainda não estão
+    // anexadas NESTE card; as demais reaproveitam o endereço já gravado.
+    const images = await db
+      .select()
+      .from(opportunityImages)
+      .where(eq(opportunityImages.opportunityId, opportunityId))
+      .orderBy(asc(opportunityImages.orderIndex), asc(opportunityImages.createdAt));
+    const imageUrls = new Map<string, string>();
+    const newAttachments: AzureAttachment[] = [];
+    const newlyUploaded: string[] = [];
+    for (const img of images) {
+      if (img.azureUrl && opp.azureFeatureId && img.azureFeatureId === opp.azureFeatureId) {
+        imageUrls.set(img.id, img.azureUrl);
+        continue;
+      }
+      const up = await uploadAttachment(img.fileName, new Uint8Array(img.data));
+      imageUrls.set(img.id, up.url);
+      newAttachments.push({ url: up.url, comment: img.title });
+      newlyUploaded.push(img.id);
+    }
+
     const description = buildFeatureDescription({
+      images: images.map((img) => ({ url: imageUrls.get(img.id)!, title: img.title })),
       opportunityTitle: opp.title,
       opportunityDescription: opp.description ?? "",
       problemRef: opp.problemRef,
@@ -233,15 +265,33 @@ export async function sendToAzureDevOps(opportunityId: string) {
       },
     });
 
+    // Tags: o card fica com as tags desta oportunidade (mais o que já existir lá,
+    // como ab:manter), e só saem as que este app levou antes e foram removidas aqui.
+    const appTags = opp.tags ?? [];
     let featureId = opp.azureFeatureId;
     if (featureId) {
-      await updateFeature(featureId, { title: opp.title, description, fields });
+      const current = await getFeature(featureId);
+      const tags = mergeAzureTags(current.tags, appTags, opp.azureSyncedTags ?? []);
+      await updateFeature(featureId, { title: opp.title, description, fields, tags, attachments: newAttachments });
     } else {
-      const created = await createFeature({ title: opp.title, description, fields });
+      const created = await createFeature({
+        title: opp.title,
+        description,
+        fields,
+        tags: mergeAzureTags([], appTags, []),
+        attachments: newAttachments,
+      });
       featureId = created.id;
       // Grava o vínculo já aqui: se as stories falharem logo abaixo, um novo
       // envio reaproveita este card em vez de criar outro.
       await db.update(opportunities).set({ azureFeatureId: created.id }).where(eq(opportunities.id, opportunityId));
+    }
+    await db.update(opportunities).set({ azureSyncedTags: appTags }).where(eq(opportunities.id, opportunityId));
+    for (const imgId of newlyUploaded) {
+      await db
+        .update(opportunityImages)
+        .set({ azureFeatureId: featureId, azureUrl: imageUrls.get(imgId) })
+        .where(eq(opportunityImages.id, imgId));
     }
 
     // Cada user story vira um item filho da Feature (com os critérios de aceite).
@@ -366,4 +416,63 @@ export async function updateUserStory(storyId: string, formData: FormData) {
     .where(eq(userStories.id, storyId));
 
   revalidatePath(`/opportunities/${story.opportunityId}/doc`);
+}
+
+
+// ---------- Imagens de apoio (fluxogramas) ----------
+// O envio do arquivo é feito pela rota /api/opportunities/[id]/images (limite de
+// corpo maior que o de Server Actions); aqui ficam legenda, ordem e exclusão.
+async function loadImage(imageId: string, projectId: string) {
+  const [img] = await db
+    .select({
+      id: opportunityImages.id,
+      opportunityId: opportunityImages.opportunityId,
+      orderIndex: opportunityImages.orderIndex,
+      projectId: opportunities.projectId,
+    })
+    .from(opportunityImages)
+    .innerJoin(opportunities, eq(opportunities.id, opportunityImages.opportunityId))
+    .where(eq(opportunityImages.id, imageId))
+    .limit(1);
+  if (!img || img.projectId !== projectId) throw new Error("Imagem não encontrada.");
+  return img;
+}
+
+export async function updateOpportunityImageTitle(imageId: string, formData: FormData) {
+  const { project, role } = await getPageContext();
+  if (role === "viewer") throw new Error("Sem permissão.");
+  const img = await loadImage(imageId, project.id);
+  const title = String(formData.get("title") || "").trim().slice(0, 160);
+  if (!title) throw new Error("Escreva uma legenda.");
+  await db.update(opportunityImages).set({ title }).where(eq(opportunityImages.id, imageId));
+  revalidatePath(`/opportunities/${img.opportunityId}/doc`);
+}
+
+export async function moveOpportunityImage(imageId: string, direction: "up" | "down") {
+  const { project, role } = await getPageContext();
+  if (role === "viewer") throw new Error("Sem permissão.");
+  const img = await loadImage(imageId, project.id);
+  const list = await db
+    .select({ id: opportunityImages.id })
+    .from(opportunityImages)
+    .where(eq(opportunityImages.opportunityId, img.opportunityId))
+    .orderBy(asc(opportunityImages.orderIndex), asc(opportunityImages.createdAt));
+  const ids = list.map((r) => r.id);
+  const from = ids.indexOf(imageId);
+  const to = direction === "up" ? from - 1 : from + 1;
+  if (from < 0 || to < 0 || to >= ids.length) return;
+  [ids[from], ids[to]] = [ids[to], ids[from]];
+  // Regrava a ordem inteira (0..n-1): evita empates e resolve listas antigas.
+  for (let i = 0; i < ids.length; i++) {
+    await db.update(opportunityImages).set({ orderIndex: i }).where(eq(opportunityImages.id, ids[i]));
+  }
+  revalidatePath(`/opportunities/${img.opportunityId}/doc`);
+}
+
+export async function deleteOpportunityImage(imageId: string) {
+  const { project, role } = await getPageContext();
+  if (role === "viewer") throw new Error("Sem permissão.");
+  const img = await loadImage(imageId, project.id);
+  await db.delete(opportunityImages).where(inArray(opportunityImages.id, [imageId]));
+  revalidatePath(`/opportunities/${img.opportunityId}/doc`);
 }
