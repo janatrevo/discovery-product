@@ -26,13 +26,15 @@ export function compareByPhaseThenTitle(a: { title: string }, b: { title: string
   });
 }
 
-// Nomes das fases do roadmap do Trevo One (slide 10 do roadmap acordado).
+// Nomes das fases do roadmap proposto do Trevo One (Fases 0 a 5, sem lacuna).
 // Fases sem nome aqui aparecem só como "Fase N".
 export const PHASE_NAMES: Record<number, string> = {
   0: "Fundações",
-  1: "Mensageria",
-  2: "Agenda completa",
-  3: "Voz, portal e IA",
+  1: "Atendimento",
+  2: "Voz",
+  3: "Recepção",
+  4: "Relatórios",
+  5: "Portais",
 };
 
 export function groupOpportunitiesByPhase<T extends { title: string }>(
