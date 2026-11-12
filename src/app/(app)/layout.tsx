@@ -13,11 +13,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <ProductTourProvider>
-      <div className="flex h-screen overflow-hidden bg-slate-50">
+      <div className="flex h-screen overflow-clip bg-slate-50">
         <Sidebar />
         <div className="flex min-w-0 flex-1 flex-col">
           <TopBar user={user} projects={projectsList} current={current} />
-          <main className="flex-1 overflow-y-auto p-6">{children}</main>
+          <main className="relative min-h-0 flex-1 overflow-y-auto p-6">{children}</main>
         </div>
       </div>
     </ProductTourProvider>

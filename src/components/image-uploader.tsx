@@ -48,7 +48,7 @@ export function ImageUploader({ opportunityId }: { opportunityId: string }) {
   return (
     <div className="space-y-2">
       <label
-        className={`inline-flex cursor-pointer items-center rounded-md bg-slate-100 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-200 ${
+        className={`relative inline-flex cursor-pointer items-center rounded-md bg-slate-100 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-200 ${
           busy ? "pointer-events-none opacity-60" : ""
         }`}
       >
