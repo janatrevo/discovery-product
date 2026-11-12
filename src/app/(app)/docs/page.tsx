@@ -155,6 +155,7 @@ export default function DocsPage() {
     ["backlog", "Do Discovery Board ao desenvolvimento"],
     ["decisoes", "Registro de decisões"],
     ["metodologia", "Metodologia e leituras para os curiosos"],
+    ["calendario", "Calendário do projeto: estimado x real"],
     ["limites", "Limites e cuidados"],
   ];
 
@@ -547,7 +548,37 @@ score                 = média das cinco notas × fator de evidência`}</Formula
       </Section>
 
       {/* 9 ----------------------------------------------------------- */}
-      <Section id="limites" title="9. Limites e cuidados">
+      <Section id="calendario" title="9. Calendário do projeto: estimado x real">
+        <p>
+          O <strong>Calendário do projeto</strong> guarda a linha do tempo do Trevo One e mede quanto tempo as coisas realmente levam. Parte dele se
+          preenche sozinha; o resto é registro manual.
+        </p>
+        <ul className="ml-5 list-disc space-y-2">
+          <li>
+            <strong>Automático:</strong> oportunidades concluídas (com o prazo do Gantt como data prevista), user stories concluídas, pesquisas
+            criadas e a janela de respostas, entrevistas, observações de campo, experimentos com resultado e decisões.
+          </li>
+          <li>
+            <strong>Manual:</strong> início do projeto, aceite do piloto, apresentações à diretoria, pedidos a terceiros (ZDI, Animati…) e qualquer
+            outro marco. Cada registro tem data, tipo, contraparte, data prevista e anotações.
+          </li>
+          <li>
+            <strong>Pedidos a terceiros:</strong> registre a data do pedido e, quando chegar a resposta, clique em “Foi respondido”. O app calcula a
+            espera de cada pedido e a média por contraparte.
+          </li>
+          <li>
+            <strong>Estimado x real:</strong> preencha a “data prevista” de um registro, ou defina o prazo das oportunidades no Gantt. A comparação,
+            o percentual no prazo e o atraso médio se atualizam sozinhos conforme os registros crescem.
+          </li>
+        </ul>
+        <p className="text-sm text-slate-500">
+          Só passam a contar como “real” as datas que já chegaram. A conclusão de user stories só é datada a partir do momento em que a coluna de
+          conclusão foi criada; o que foi concluído antes não aparece.
+        </p>
+      </Section>
+
+      {/* 10 ---------------------------------------------------------- */}
+      <Section id="limites" title="10. Limites e cuidados">
         <ul className="ml-5 list-disc space-y-2">
           <li>
             <strong>As cinco notas são julgamento humano.</strong> Duas pessoas podem dar notas diferentes. Combine a régua com a equipe e registre

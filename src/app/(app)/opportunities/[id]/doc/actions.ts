@@ -381,7 +381,10 @@ export async function confirmUserStory(storyId: string) {
 export async function toggleStoryDone(storyId: string, done: boolean) {
   const { role } = await getPageContext();
   if (role === "viewer") throw new Error("Sem permissão.");
-  await db.update(userStories).set({ done }).where(eq(userStories.id, storyId));
+  await db
+    .update(userStories)
+    .set({ done, doneAt: done ? new Date() : null })
+    .where(eq(userStories.id, storyId));
   revalidatePath(`/opportunities`, "layout");
 }
 

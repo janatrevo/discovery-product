@@ -17,6 +17,7 @@ import {
   Settings,
   Kanban,
   BookOpen,
+  CalendarDays,
 } from "lucide-react";
 import { useProductTour } from "./product-tour";
 
@@ -36,6 +37,7 @@ const NAV = [
   { href: "/repository", label: "Research Repository", icon: Library, tourId: "nav-repository" },
   { href: "/opportunities", label: "Discovery Board", icon: Target, tourId: "nav-opportunities" },
   { href: "/decisions", label: "Decision Log", icon: ScrollText, tourId: "nav-decisions" },
+  { href: "/calendario", label: "Calendário do projeto", icon: CalendarDays, tourId: "nav-calendar" },
   { href: "/reports", label: "Reports", icon: FileBarChart, tourId: "nav-reports" },
   { href: "/azure-devops", label: "Azure DevOps", icon: Kanban, tourId: "nav-azure-devops" },
   { href: "/docs", label: "Documentação", icon: BookOpen, tourId: "nav-docs" },

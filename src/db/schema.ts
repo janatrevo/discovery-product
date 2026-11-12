@@ -15,6 +15,7 @@ import {
   text,
   varchar,
   timestamp,
+  date,
   boolean,
   integer,
   numeric,
@@ -969,6 +970,9 @@ export const userStories = pgTable("user_stories", {
   aiGenerated: boolean("ai_generated").notNull().default(false),
   confirmed: boolean("confirmed").notNull().default(true),
   done: boolean("done").notNull().default(false),
+  // Quando a story foi marcada como feita (preenchido por toggleStoryDone). Alimenta o
+  // Calendário do projeto (prazo estimado x real). Stories feitas antes deste campo ficam sem data.
+  doneAt: timestamp("done_at", { withTimezone: true }),
   orderIndex: integer("order_index").notNull().default(0),
   createdBy: uuid("created_by").references(() => users.id),
   createdAt: createdAt(),
@@ -1038,6 +1042,32 @@ export const reports = pgTable("reports", {
   title: varchar("title", { length: 255 }).notNull(),
   scope: jsonb("scope"),
   content: jsonb("content"),
+  createdBy: uuid("created_by").references(() => users.id),
+  createdAt: createdAt(),
+});
+
+// ---------- Calendário do projeto (prazo estimado x real) ----------
+// Registros MANUAIS do que acontece no projeto Trevo One: início, respostas de pesquisa,
+// aceite do piloto, apresentações, pedidos a terceiros (ZDI, Animati...) e quando foram
+// respondidos. O que o app já sabe (oportunidades, stories, pesquisas, entrevistas,
+// observações em campo, decisões) NÃO é copiado para cá: a página /calendario lê direto
+// dessas tabelas, então os relatórios se atualizam sozinhos.
+//   occurred_on = quando aconteceu / começou (ou quando o pedido foi feito)
+//   finished_on = quando terminou / foi respondido (opcional)
+//   planned_on  = data prevista (opcional): base da comparação estimado x real
+export const projectEvents = pgTable("project_events", {
+  id: id(),
+  projectId: uuid("project_id")
+    .references(() => projects.id, { onDelete: "cascade" })
+    .notNull(),
+  category: varchar("category", { length: 40 }).notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  notes: text("notes"),
+  counterparty: varchar("counterparty", { length: 120 }), // com quem (ex.: ZDI, Animati)
+  occurredOn: date("occurred_on", { mode: "string" }).notNull(),
+  finishedOn: date("finished_on", { mode: "string" }),
+  plannedOn: date("planned_on", { mode: "string" }),
+  opportunityId: uuid("opportunity_id").references(() => opportunities.id, { onDelete: "set null" }),
   createdBy: uuid("created_by").references(() => users.id),
   createdAt: createdAt(),
 });
