@@ -1,16 +1,13 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 
 // Botão para anexar imagens (fluxogramas) à oportunidade. Aceita várias de uma vez;
 // cada uma vai numa requisição separada para respeitar o limite de tamanho da Vercel.
 export function ImageUploader({ opportunityId }: { opportunityId: string }) {
-  const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
-
   async function onPick(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
     if (files.length === 0) return;
@@ -37,10 +34,15 @@ export function ImageUploader({ opportunityId }: { opportunityId: string }) {
     setBusy(false);
     if (errors.length > 0) {
       setMessage({ kind: "error", text: `${sent > 0 ? `${sent} enviada(s). ` : ""}Não enviei: ${errors.join(" · ")}` });
-    } else {
-      setMessage({ kind: "ok", text: `${sent} imagem(ns) adicionada(s). Clique em "Atualizar Feature" no Azure DevOps para levá-las ao card.` });
+    } else if (sent > 0) {
+      // Recarrega a página inteira (o refresh parcial do Next deixou a tela em branco em
+      // produção) e avisa o sucesso pelo endereço (?imagens=N), que a página lê.
+      const url = new URL(window.location.href);
+      url.searchParams.delete("azureError");
+      url.searchParams.delete("azureOk");
+      url.searchParams.set("imagens", String(sent));
+      window.location.assign(url.toString());
     }
-    router.refresh();
   }
 
   return (
@@ -61,6 +63,14 @@ export function ImageUploader({ opportunityId }: { opportunityId: string }) {
           }`}
         >
           {message.text}
+          {message.kind === "error" && (
+            <>
+              {" "}
+              <button type="button" className="underline" onClick={() => window.location.reload()}>
+                Recarregar a página
+              </button>
+            </>
+          )}
         </p>
       )}
     </div>

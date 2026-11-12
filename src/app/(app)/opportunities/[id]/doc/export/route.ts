@@ -55,6 +55,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   else lines.push("_Nenhum definido ainda._");
   lines.push("");
 
+  if (doc?.flowText) {
+    lines.push("## Fluxo do processo", "", doc.flowText, "");
+  }
+
   lines.push("## User Stories", "");
   if (stories.length === 0) {
     lines.push("_Nenhuma story ainda._");

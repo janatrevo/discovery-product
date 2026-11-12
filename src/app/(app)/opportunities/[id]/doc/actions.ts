@@ -147,6 +147,8 @@ export async function updateProductDoc(opportunityId: string, formData: FormData
   const openQuestions = linesToArray(formData.get("openQuestions"));
   const businessRules = linesToArray(formData.get("businessRules"));
   const successMetrics = linesToArray(formData.get("successMetrics"));
+  // Fluxo escrito: texto livre (quebras de linha e recuos importam), então não passa por linesToArray.
+  const flowText = String(formData.get("flowText") ?? "").replace(/\r\n/g, "\n").trim() || null;
 
   const [existing] = await db.select().from(productDocs).where(eq(productDocs.opportunityId, opportunityId)).limit(1);
 
@@ -157,7 +159,7 @@ export async function updateProductDoc(opportunityId: string, formData: FormData
   if (existing) {
     await db
       .update(productDocs)
-      .set({ goals, nonGoals, openQuestions, businessRules, successMetrics, generatedBy: nextGeneratedBy, updatedAt: new Date() })
+      .set({ goals, nonGoals, openQuestions, businessRules, successMetrics, flowText, generatedBy: nextGeneratedBy, updatedAt: new Date() })
       .where(eq(productDocs.id, existing.id));
   } else {
     await db.insert(productDocs).values({
@@ -167,6 +169,7 @@ export async function updateProductDoc(opportunityId: string, formData: FormData
       openQuestions,
       businessRules,
       successMetrics,
+      flowText,
       generatedBy: "human",
       createdBy: user.id,
     });
@@ -242,6 +245,7 @@ export async function sendToAzureDevOps(opportunityId: string) {
     }
 
     const description = buildFeatureDescription({
+      flowText: doc.flowText,
       images: images.map((img) => ({ url: imageUrls.get(img.id)!, title: img.title })),
       opportunityTitle: opp.title,
       opportunityDescription: opp.description ?? "",

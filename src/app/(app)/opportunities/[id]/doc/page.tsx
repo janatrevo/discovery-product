@@ -55,10 +55,11 @@ export default async function ProductDocPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ azureError?: string; azureOk?: string; azureStories?: string }>;
+  searchParams: Promise<{ azureError?: string; azureOk?: string; azureStories?: string; imagens?: string }>;
 }) {
   const { id } = await params;
-  const { azureError, azureOk, azureStories } = await searchParams;
+  const { azureError, azureOk, azureStories, imagens } = await searchParams;
+  const imagensAdicionadas = Number(imagens) || 0;
   const [storiesCreated, storiesUpdated] = (azureStories ?? "0,0").split(",").map((n) => Number(n) || 0);
   const { project, role } = await getPageContext();
   const [opp] = await db.select().from(opportunities).where(eq(opportunities.id, id)).limit(1);
@@ -157,6 +158,19 @@ export default async function ProductDocPage({
               <Label>Success Metrics (uma por linha)</Label>
               <Textarea name="successMetrics" rows={3} defaultValue={arrayToLines(doc?.successMetrics as string[])} />
             </Field>
+            <Field>
+              <Label>Fluxo do processo, passo a passo</Label>
+              <Textarea
+                name="flowText"
+                rows={14}
+                defaultValue={doc?.flowText ?? ""}
+                placeholder={"## Fluxo 1 · Nome do fluxo\n1. Primeiro passo.\n2. Segundo passo. Se não, ...\n   Detalhe recuado com espaços."}
+              />
+              <p className="mt-1 text-xs text-slate-400">
+                Uma linha por passo. Linha começando com &quot;## &quot; vira subtítulo. Vai para a Description do card no Azure
+                DevOps, junto com as imagens abaixo.
+              </p>
+            </Field>
             <div className="flex gap-2">
               <Button type="submit" size="sm">
                 Salvar
@@ -190,6 +204,14 @@ export default async function ProductDocPage({
                 )}
               </div>
             ))}
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Fluxo do processo</p>
+              {doc?.flowText ? (
+                <pre className="whitespace-pre-wrap font-sans">{doc.flowText}</pre>
+              ) : (
+                <p className="text-slate-400">Nenhum ainda.</p>
+              )}
+            </div>
           </div>
         )}
       </Card>
@@ -399,6 +421,12 @@ export default async function ProductDocPage({
               </li>
             ))}
           </ul>
+        )}
+        {imagensAdicionadas > 0 && (
+          <p className="mb-3 rounded-md border border-emerald-200 bg-emerald-50 p-2 text-xs text-emerald-700">
+            {imagensAdicionadas} imagem(ns) adicionada(s). Clique em &quot;Atualizar Feature&quot; no Azure DevOps (card abaixo) para
+            levá-las ao card.
+          </p>
         )}
         {canEdit && <ImageUploader opportunityId={id} />}
       </Card>

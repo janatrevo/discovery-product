@@ -920,6 +920,9 @@ export const productDocs = pgTable("product_docs", {
   // cada User Story, compõem o card completo.
   businessRules: jsonb("business_rules").$type<string[]>().default(sql`'[]'::jsonb`),
   successMetrics: jsonb("success_metrics").$type<string[]>().default(sql`'[]'::jsonb`),
+  // Fluxo do processo escrito passo a passo (texto livre, uma linha por passo;
+  // "## " no começo da linha vira subtítulo). Vai para a Description do card no Azure.
+  flowText: text("flow_text"),
   generatedBy: generatedByEnum("generated_by").notNull().default("human"),
   promptSnapshot: text("prompt_snapshot"),
   modelVersion: varchar("model_version", { length: 120 }),

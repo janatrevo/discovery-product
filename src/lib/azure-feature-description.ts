@@ -23,6 +23,21 @@ function escapeAttr(text: string) {
   return escapeHtml(text).replace(/"/g, "&quot;");
 }
 
+// Texto do fluxo (uma linha por passo) -> HTML. "## " vira subtítulo; espaços no
+// começo da linha viram recuo; linhas em branco são ignoradas.
+export function flowTextToHtml(text: string) {
+  return text
+    .split(/\r?\n/)
+    .filter((l) => l.trim() !== "")
+    .map((line) => {
+      const heading = /^\s*##\s+(.*)$/.exec(line);
+      if (heading) return `<h4>${escapeHtml(heading[1].trim())}</h4>`;
+      const indent = (/^\s*/.exec(line)?.[0].length ?? 0);
+      return `<p>${"&nbsp;".repeat(Math.min(indent, 12))}${escapeHtml(line.trim())}</p>`;
+    })
+    .join("");
+}
+
 function section(title: string, items: string[] | undefined) {
   if (!items || items.length === 0) return "";
   const lis = items.map((i) => `<li>${escapeHtml(i)}</li>`).join("");
@@ -38,6 +53,8 @@ export function buildFeatureDescription(input: {
   openQuestions?: string[];
   businessRules?: string[];
   successMetrics?: string[];
+  // Fluxo do processo escrito passo a passo (product_docs.flow_text).
+  flowText?: string | null;
   // Imagens de apoio (fluxogramas): já anexadas ao Azure; url é a do anexo.
   images?: { url: string; title: string }[];
   userStories: { asA: string | null; iWant: string; soThat: string | null; acceptanceCriteria: string[] }[];
@@ -56,6 +73,10 @@ export function buildFeatureDescription(input: {
   }
   if (input.problemRef) {
     parts.push(`<p><strong>Problema observado:</strong> ${escapeHtml(input.problemRef)}</p>`);
+  }
+
+  if (input.flowText && input.flowText.trim()) {
+    parts.push(`<h3>Fluxo do processo</h3>${flowTextToHtml(input.flowText)}`);
   }
 
   if (input.images && input.images.length > 0) {
