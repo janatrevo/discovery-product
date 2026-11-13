@@ -10,6 +10,7 @@ const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 export const USABILITY_BUCKET = "usability-assets";
 export const INTERVIEW_BUCKET = "interview-recordings";
 export const FIELD_MEDIA_BUCKET = "field-observation-media";
+export const PROJECT_FILES_BUCKET = "project-event-files";
 
 function assertConfigured() {
   if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {

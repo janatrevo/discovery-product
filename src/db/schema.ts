@@ -1071,3 +1071,21 @@ export const projectEvents = pgTable("project_events", {
   createdBy: uuid("created_by").references(() => users.id),
   createdAt: createdAt(),
 });
+
+// Arquivos anexados a um registro do calendário (ex.: o PPT usado numa apresentação à diretoria).
+// O arquivo fica no bucket privado do Storage; aqui só os metadados.
+export const projectEventFiles = pgTable("project_event_files", {
+  id: id(),
+  projectId: uuid("project_id")
+    .references(() => projects.id, { onDelete: "cascade" })
+    .notNull(),
+  eventId: uuid("event_id")
+    .references(() => projectEvents.id, { onDelete: "cascade" })
+    .notNull(),
+  filePath: text("file_path").notNull(),
+  fileName: varchar("file_name", { length: 255 }).notNull(),
+  contentType: varchar("content_type", { length: 150 }),
+  sizeBytes: integer("size_bytes"),
+  createdBy: uuid("created_by").references(() => users.id),
+  createdAt: createdAt(),
+});

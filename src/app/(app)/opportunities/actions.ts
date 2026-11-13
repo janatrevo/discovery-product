@@ -240,6 +240,8 @@ export async function updatePlannedDates(opportunityId: string, formData: FormDa
 
   await db.update(opportunities).set({ plannedStartDate, plannedEndDate }).where(eq(opportunities.id, opportunityId));
   revalidatePath("/azure-devops/roadmap");
+  revalidatePath("/opportunities");
+  revalidatePath("/calendario");
   revalidatePath(`/opportunities/${opportunityId}`);
 }
 

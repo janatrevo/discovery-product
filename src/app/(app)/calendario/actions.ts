@@ -1,11 +1,12 @@
 "use server";
 
 import { db } from "@/db";
-import { projectEvents } from "@/db/schema";
+import { projectEventFiles, projectEvents } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getPageContext } from "@/lib/page-context";
+import { deleteFromStorage, PROJECT_FILES_BUCKET } from "@/lib/supabase-storage";
 import { isCategory, isValidDay, todayStr } from "@/lib/project-calendar";
 
 type Parsed = {
@@ -54,22 +55,26 @@ function back(error?: string, extra?: Record<string, string>): never {
   const p = new URLSearchParams(extra);
   if (error) p.set("erro", error.slice(0, 400));
   const q = p.toString();
-  redirect(`/calendario${q ? `?${q}` : ""}`);
+  const anchor = extra?.anexar ? `#ev-${extra.anexar}` : "";
+  redirect(`/calendario${q ? `?${q}` : ""}${anchor}`);
 }
 
 export async function createProjectEvent(formData: FormData) {
   const { user, project, role } = await getPageContext();
   let error: string | null = null;
+  let newId: string | null = null;
   try {
     if (role === "viewer") throw new Error("Viewers não podem registrar eventos.");
     const v = parse(formData);
-    await db.insert(projectEvents).values({ projectId: project.id, createdBy: user.id, ...v });
+    const [row] = await db.insert(projectEvents).values({ projectId: project.id, createdBy: user.id, ...v }).returning({ id: projectEvents.id });
+    newId = row.id;
   } catch (e) {
     error = e instanceof Error ? e.message : "Não foi possível salvar.";
   }
   revalidatePath("/calendario");
   if (error) back(error, { novo: "1" });
-  back(undefined, { ok: "1" });
+  // Abre o registro recém-criado já com a área de anexos à mostra.
+  back(undefined, newId ? { ok: "1", anexar: newId } : { ok: "1" });
 }
 
 export async function updateProjectEvent(id: string, formData: FormData) {
@@ -119,7 +124,15 @@ export async function deleteProjectEvent(id: string) {
     const [row] = await db.select().from(projectEvents).where(and(eq(projectEvents.id, id), eq(projectEvents.projectId, project.id))).limit(1);
     if (!row) throw new Error("Registro não encontrado.");
     if (role === "contributor" && row.createdBy !== user.id) throw new Error("Você só pode apagar os registros que criou.");
-    await db.delete(projectEvents).where(eq(projectEvents.id, id));
+    const files = await db.select({ filePath: projectEventFiles.filePath }).from(projectEventFiles).where(eq(projectEventFiles.eventId, id));
+    await db.delete(projectEvents).where(eq(projectEvents.id, id)); // os metadados dos anexos saem em cascata
+    for (const f of files) {
+      try {
+        await deleteFromStorage(PROJECT_FILES_BUCKET, f.filePath);
+      } catch {
+        // arquivo órfão no Storage não deve impedir a exclusão
+      }
+    }
   } catch (e) {
     error = e instanceof Error ? e.message : "Não foi possível apagar.";
   }

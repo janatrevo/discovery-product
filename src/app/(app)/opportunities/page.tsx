@@ -5,6 +5,7 @@ import { opportunities, personas, hypotheses } from "@/db/schema";
 import { eq, asc, desc } from "drizzle-orm";
 import { Button, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { OpportunityBoard, type OpportunityCardData } from "@/components/opportunity-board";
+import { RoadmapView } from "@/components/roadmap-view";
 
 const COLUMNS: { value: string; label: string }[] = [
   { value: "new", label: "Novas" },
@@ -14,12 +15,47 @@ const COLUMNS: { value: string; label: string }[] = [
   { value: "archived", label: "Arquivadas" },
 ];
 
+// Abas do Discovery Board: o quadro de cards e o Gantt (antes só acessível por Azure DevOps > Roadmap).
+function BoardTabs({ active, ordem }: { active: "quadro" | "gantt"; ordem: string }) {
+  const base = "rounded-t-md border-b-2 px-4 py-2 text-sm font-medium";
+  const on = "border-indigo-600 text-indigo-700";
+  const off = "border-transparent text-slate-500 hover:text-slate-800";
+  return (
+    <div className="mb-5 flex gap-1 border-b border-slate-200">
+      <Link href={ordem === "score" ? "/opportunities?ordem=score" : "/opportunities"} className={`${base} ${active === "quadro" ? on : off}`}>
+        Quadro
+      </Link>
+      <Link href="/opportunities?aba=gantt" className={`${base} ${active === "gantt" ? on : off}`}>
+        Gantt (prazos)
+      </Link>
+    </div>
+  );
+}
+
 // ordem=manual (padrão): a ordem que a equipe montou arrastando os cards
 // (empates caem no score). ordem=score: só pelo score de priorização, sem
 // arrastar.
-export default async function OpportunitiesPage({ searchParams }: { searchParams: Promise<{ ordem?: string }> }) {
+export default async function OpportunitiesPage({ searchParams }: { searchParams: Promise<{ ordem?: string; aba?: string }> }) {
   const { project, role } = await getPageContext();
-  const { ordem = "manual" } = await searchParams;
+  const { ordem = "manual", aba } = await searchParams;
+
+  if (aba === "gantt") {
+    return (
+      <div>
+        <PageHeader
+          title="Discovery Board"
+          description="Gantt das oportunidades enviadas ao Azure DevOps: prazo planejado de cada uma e o estado atual. Quem é Owner define as datas na tabela abaixo do gráfico."
+          actions={
+            <Link href="/calendario">
+              <Button variant="secondary">Ver estimado x real no calendário</Button>
+            </Link>
+          }
+        />
+        <BoardTabs active="gantt" ordem={ordem} />
+        <RoadmapView />
+      </div>
+    );
+  }
   const byScore = ordem === "score";
 
   const [list, personaList, hypothesisList] = await Promise.all([
@@ -85,6 +121,8 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
           </>
         }
       />
+
+      <BoardTabs active="quadro" ordem={ordem} />
 
       {list.length === 0 ? (
         <EmptyState

@@ -567,10 +567,19 @@ score                 = média das cinco notas × fator de evidência`}</Formula
             espera de cada pedido e a média por contraparte.
           </li>
           <li>
+            <strong>Arquivos:</strong> cada registro manual aceita anexos (PDF, PowerPoint, Word, Excel, imagens, áudio, vídeo ou ZIP, até 50 MB
+            cada). Por exemplo, o PPT usado na apresentação à diretoria fica guardado na data em que ela aconteceu, para comparar com versões
+            seguintes. Abra o registro na linha do tempo para anexar ou baixar.
+          </li>
+          <li>
             <strong>Estimado x real:</strong> preencha a “data prevista” de um registro, ou defina o prazo das oportunidades no Gantt. A comparação,
             o percentual no prazo e o atraso médio se atualizam sozinhos conforme os registros crescem.
           </li>
         </ul>
+        <p>
+          O <strong>Gantt</strong> está na aba “Gantt (prazos)” do Discovery Board. Ele mostra as oportunidades enviadas ao Azure DevOps com as
+          datas planejadas; quem é Owner ajusta as datas ali mesmo, e o calendário usa essas datas como prazo previsto.
+        </p>
         <p className="text-sm text-slate-500">
           Só passam a contar como “real” as datas que já chegaram. A conclusão de user stories só é datada a partir do momento em que a coluna de
           conclusão foi criada; o que foi concluído antes não aparece.

@@ -5,7 +5,7 @@ import { eq, asc } from "drizzle-orm";
 import { getPageContext } from "@/lib/page-context";
 import { Badge, Button, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
-import { loadAutoEvents, loadManualEvents } from "@/lib/project-calendar-data";
+import { loadAutoEvents, loadEventFiles, loadManualEvents } from "@/lib/project-calendar-data";
 import {
   CATEGORIES,
   CATEGORY_KEYS,
@@ -31,8 +31,10 @@ import {
 } from "@/lib/project-calendar";
 import { createProjectEvent, deleteProjectEvent, markEventAnswered, updateProjectEvent } from "./actions";
 import { EventForm } from "./event-form";
+import { EventFiles } from "./event-files";
+import type { EventFileItem } from "@/lib/project-event-files";
 
-type SP = { mes?: string; cat?: string; origem?: string; novo?: string; erro?: string; ok?: string };
+type SP = { mes?: string; cat?: string; origem?: string; novo?: string; erro?: string; ok?: string; anexar?: string };
 
 const STATUS_LABEL: Record<PlanRow["status"], { text: string; color: "emerald" | "sky" | "red" | "amber" | "slate" }> = {
   no_prazo: { text: "No prazo", color: "emerald" },
@@ -43,7 +45,7 @@ const STATUS_LABEL: Record<PlanRow["status"], { text: string; color: "emerald" |
 };
 
 function qs(base: SP, patch: Partial<SP>) {
-  const m = { ...base, ...patch, erro: undefined, ok: undefined, novo: undefined } as Record<string, string | undefined>;
+  const m = { ...base, ...patch, erro: undefined, ok: undefined, novo: undefined, anexar: undefined } as Record<string, string | undefined>;
   const p = new URLSearchParams();
   for (const [k, v] of Object.entries(m)) if (v) p.set(k, v);
   const s = p.toString();
@@ -70,9 +72,10 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   const catFilter: CategoryKey | "" = sp.cat && isCategory(sp.cat) ? sp.cat : "";
   const originFilter = sp.origem === "manual" || sp.origem === "auto" ? sp.origem : "";
 
-  const [manual, auto, oppList] = await Promise.all([
+  const [manual, auto, filesByEvent, oppList] = await Promise.all([
     loadManualEvents(project.id),
     loadAutoEvents(project.id),
+    loadEventFiles(project.id),
     db.select({ id: opportunities.id, title: opportunities.title }).from(opportunities).where(eq(opportunities.projectId, project.id)).orderBy(asc(opportunities.title)),
   ]);
 
@@ -111,7 +114,11 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
       />
 
       {sp.erro && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{sp.erro}</div>}
-      {sp.ok && <div className="mb-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">Salvo.</div>}
+      {sp.ok && (
+        <div className="mb-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+          Salvo.{sp.anexar && canWrite ? " Para anexar arquivos (ex.: o PPT usado), use a área “Arquivos anexados” do registro, aberto na linha do tempo abaixo." : ""}
+        </div>
+      )}
 
       {canWrite && (
         <details open={!!sp.novo || !!sp.erro} className="mb-6 rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -357,7 +364,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
         ) : (
           <div className="space-y-2">
             {visible.slice(0, 200).map((e) => (
-              <EventRow key={e.key} e={e} today={today} canWrite={canWrite} counterparties={counterparties} opportunities={oppList} />
+              <EventRow key={e.key} e={e} today={today} canWrite={canWrite} counterparties={counterparties} opportunities={oppList} files={e.id ? filesByEvent.get(e.id) ?? [] : []} openNow={!!sp.anexar && sp.anexar === e.id} />
             ))}
             {visible.length > 200 && <p className="text-xs text-slate-400">Mostrando os 200 mais recentes de {visible.length}. Use os filtros para refinar.</p>}
           </div>
@@ -373,12 +380,16 @@ function EventRow({
   canWrite,
   counterparties,
   opportunities: opps,
+  files,
+  openNow,
 }: {
   e: CalEvent;
   today: string;
   canWrite: boolean;
   counterparties: string[];
   opportunities: { id: string; title: string }[];
+  files: EventFileItem[];
+  openNow: boolean;
 }) {
   const c = CATEGORIES[e.category];
   const real = realDate(e, today);
@@ -391,6 +402,7 @@ function EventRow({
       <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${c.chip}`}>{c.label}</span>
       <span className="min-w-0 flex-1 text-sm text-slate-900">{e.title}</span>
       {e.counterparty && <span className="text-xs text-slate-500">{e.counterparty}</span>}
+      {files.length > 0 && <span className="text-xs text-slate-500" title={files.map((f) => f.name).join("\n")}>📎 {files.length}</span>}
       {dur !== null && <Badge color="sky">{e.category === "solicitacao" ? "respondido em " : "durou "}{fmtDays(dur)}</Badge>}
       {waiting && <Badge color="amber">aguardando{e.start <= today ? ` há ${fmtDays(daysBetween(e.start, today))}` : ""}</Badge>}
       {dev !== null && <Badge color={dev > 0 ? "red" : "emerald"}>{dev > 0 ? `${dev} d de atraso` : dev < 0 ? `${-dev} d antes` : "no prazo"}</Badge>}
@@ -412,10 +424,11 @@ function EventRow({
     );
   }
   return (
-    <details id={`ev-${e.id}`} className="rounded-lg border border-slate-200 bg-white">
+    <details id={`ev-${e.id}`} open={openNow} className="rounded-lg border border-slate-200 bg-white">
       <summary className="cursor-pointer list-none px-4 py-2.5">{head}</summary>
       <div className="border-t border-slate-100 p-4">
         {e.notes && <p className="mb-3 whitespace-pre-wrap text-sm text-slate-600">{e.notes}</p>}
+        {e.id && <EventFiles eventId={e.id} files={files} canEdit={canWrite} autoFocus={openNow} />}
         {canWrite && e.id && (
           <>
             <EventForm action={updateProjectEvent.bind(null, e.id)} event={e} counterparties={counterparties} opportunities={opps} submitLabel="Salvar alterações" idPrefix={`ed-${e.id}`} />

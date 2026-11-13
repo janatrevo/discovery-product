@@ -1,6 +1,7 @@
 import { db } from "@/db";
 import {
   projectEvents,
+  projectEventFiles,
   opportunities,
   userStories,
   surveys,
@@ -12,11 +13,24 @@ import {
 } from "@/db/schema";
 import { and, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { dayOf, isCategory, type CalEvent } from "./project-calendar";
+import type { EventFileItem } from "./project-event-files";
 
 const cut = (s: string | null | undefined, n: number) => {
   const t = (s ?? "").replace(/\s+/g, " ").trim();
   return t.length > n ? `${t.slice(0, n - 1)}…` : t;
 };
+
+/** Anexos dos registros manuais, agrupados por registro (só metadados; o download passa por /api/project-event-files). */
+export async function loadEventFiles(projectId: string): Promise<Map<string, EventFileItem[]>> {
+  const rows = await db.select().from(projectEventFiles).where(eq(projectEventFiles.projectId, projectId)).orderBy(projectEventFiles.createdAt);
+  const map = new Map<string, EventFileItem[]>();
+  for (const r of rows) {
+    const list = map.get(r.eventId) ?? [];
+    list.push({ id: r.id, name: r.fileName, size: r.sizeBytes, createdAt: r.createdAt.toISOString() });
+    map.set(r.eventId, list);
+  }
+  return map;
+}
 
 /** Registros feitos à mão na página /calendario. */
 export async function loadManualEvents(projectId: string): Promise<CalEvent[]> {
