@@ -163,7 +163,7 @@ export async function loadAutoEvents(projectId: string): Promise<CalEvent[]> {
     const d = dayOf(i.interviewDate);
     if (!d) continue;
     const who = i.intervieweeName || i.intervieweeRef || "entrevista";
-    out.push({ key: `a-int-${i.id}`, source: "auto", category: "pesquisa", title: `Entrevista: ${who}${i.intervieweeLab ? ` (${i.intervieweeLab})` : ""}`, start: d, end: null, planned: null, href: `/research/interviews/${i.id}`, origin: "Entrevista" });
+    out.push({ key: `a-int-${i.id}`, source: "auto", category: "pesquisa", title: `Entrevista: ${who}${i.intervieweeLab ? ` (${i.intervieweeLab})` : ""}`, start: d, end: null, planned: null, href: i.guideId ? `/research/interviews/${i.guideId}/interview/${i.id}` : "/research/interviews", origin: "Entrevista" });
   }
 
   // Observações em campo e resultados de experimentos.
