@@ -1,4 +1,4 @@
-import { InputHTMLAttributes, TextareaHTMLAttributes, SelectHTMLAttributes, ReactNode } from "react";
+import { InputHTMLAttributes, SelectHTMLAttributes, ReactNode } from "react";
 import clsx from "clsx";
 
 // Button e SubmitLink vivem em ./button (componente de cliente: mostram o andamento da ação).
@@ -16,17 +16,8 @@ export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElem
   );
 }
 
-export function Textarea({ className, ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return (
-    <textarea
-      className={clsx(
-        "w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500",
-        className
-      )}
-      {...props}
-    />
-  );
-}
+// Textarea cresce sozinho conforme o texto (ver ./textarea) — não precisa mais arrastar o canto da caixa.
+export { Textarea } from "./textarea";
 
 export function Select({ className, children, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
   return (

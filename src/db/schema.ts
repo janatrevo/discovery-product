@@ -916,6 +916,9 @@ export const productDocs = pgTable("product_docs", {
     .notNull()
     .unique(),
   goals: jsonb("goals").$type<string[]>().default(sql`'[]'::jsonb`),
+  // Objetivos já concluídos (texto exato de cada objetivo marcado no checklist do PRD).
+  // O percentual de progresso da oportunidade = objetivos concluídos / total de objetivos.
+  goalsDone: jsonb("goals_done").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
   nonGoals: jsonb("non_goals").$type<string[]>().default(sql`'[]'::jsonb`),
   openQuestions: jsonb("open_questions").$type<string[]>().default(sql`'[]'::jsonb`),
   // Usados ao transformar a oportunidade em Feature no Azure DevOps (ver

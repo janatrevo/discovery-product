@@ -76,6 +76,7 @@ export async function generateProductDoc(opportunityId: string) {
       .update(productDocs)
       .set({
         goals: data.goals,
+        goalsDone: [],
         nonGoals: data.nonGoals,
         openQuestions: data.openQuestions,
         businessRules: data.businessRules,
@@ -142,7 +143,9 @@ export async function updateProductDoc(opportunityId: string, formData: FormData
   if (role === "viewer") throw new Error("Sem permissão.");
   await loadOpportunity(opportunityId, project.id);
 
-  const goals = linesToArray(formData.get("goals"));
+  // Os objetivos agora são um checklist com salvamento próprio (addGoal/toggleGoal...);
+  // só sobrescreve se um formulário antigo ainda mandar o campo.
+  const goals = formData.has("goals") ? linesToArray(formData.get("goals")) : null;
   const nonGoals = linesToArray(formData.get("nonGoals"));
   const openQuestions = linesToArray(formData.get("openQuestions"));
   const businessRules = linesToArray(formData.get("businessRules"));
@@ -159,12 +162,12 @@ export async function updateProductDoc(opportunityId: string, formData: FormData
   if (existing) {
     await db
       .update(productDocs)
-      .set({ goals, nonGoals, openQuestions, businessRules, successMetrics, flowText, generatedBy: nextGeneratedBy, updatedAt: new Date() })
+      .set({ ...(goals ? { goals } : {}), nonGoals, openQuestions, businessRules, successMetrics, flowText, generatedBy: nextGeneratedBy, updatedAt: new Date() })
       .where(eq(productDocs.id, existing.id));
   } else {
     await db.insert(productDocs).values({
       opportunityId,
-      goals,
+      goals: goals ?? [],
       nonGoals,
       openQuestions,
       businessRules,
@@ -482,4 +485,101 @@ export async function deleteOpportunityImage(imageId: string) {
   const img = await loadImage(imageId, project.id);
   await db.delete(opportunityImages).where(inArray(opportunityImages.id, [imageId]));
   revalidatePath(`/opportunities/${img.opportunityId}/doc`);
+}
+
+// ---------------------------------------------------------------------------
+// Objetivos como checklist (cada ação salva na hora; o percentual da
+// oportunidade = objetivos concluídos / total). Ver goals-checklist.tsx.
+// ---------------------------------------------------------------------------
+
+export type GoalResult = { ok: true } | { ok: false; error: string };
+
+async function mutateGoals(
+  opportunityId: string,
+  mutate: (goals: string[], done: string[]) => { goals: string[]; done: string[] } | string,
+  opts: { textChange: boolean }
+): Promise<GoalResult> {
+  try {
+    const { user, project, role } = await getPageContext();
+    if (role === "viewer") return { ok: false, error: "Sem permissão." };
+    await loadOpportunity(opportunityId, project.id);
+
+    const [existing] = await db.select().from(productDocs).where(eq(productDocs.opportunityId, opportunityId)).limit(1);
+    const result = mutate(((existing?.goals as string[]) ?? []).slice(), ((existing?.goalsDone as string[]) ?? []).slice());
+    if (typeof result === "string") return { ok: false, error: result };
+
+    if (existing) {
+      const nextGeneratedBy =
+        opts.textChange && existing.generatedBy === "ai_generated" ? "ai_assisted" : existing.generatedBy;
+      await db
+        .update(productDocs)
+        .set({ goals: result.goals, goalsDone: result.done, generatedBy: nextGeneratedBy, updatedAt: new Date() })
+        .where(eq(productDocs.id, existing.id));
+    } else {
+      await db.insert(productDocs).values({
+        opportunityId,
+        goals: result.goals,
+        goalsDone: result.done,
+        generatedBy: "human",
+        createdBy: user.id,
+      });
+    }
+    revalidatePath(`/opportunities/${opportunityId}/doc`);
+    revalidatePath(`/opportunities/${opportunityId}`);
+    revalidatePath("/opportunities");
+    return { ok: true };
+  } catch (err) {
+    const digest = (err as { digest?: unknown } | null)?.digest;
+    if (typeof digest === "string" && digest.startsWith("NEXT_REDIRECT")) throw err;
+    console.error("mutateGoals:", err);
+    return { ok: false, error: "Não foi possível salvar. Confira se o SQL prd_objetivos_checklist.sql já foi rodado no Supabase." };
+  }
+}
+
+export async function addGoal(opportunityId: string, text: string): Promise<GoalResult> {
+  const t = text.trim();
+  if (!t) return { ok: false, error: "Escreva o objetivo." };
+  return mutateGoals(
+    opportunityId,
+    (goals, done) => (goals.includes(t) ? "Esse objetivo já está na lista." : { goals: [...goals, t], done }),
+    { textChange: true }
+  );
+}
+
+export async function toggleGoal(opportunityId: string, text: string, checked: boolean): Promise<GoalResult> {
+  return mutateGoals(
+    opportunityId,
+    (goals, done) => {
+      if (!goals.includes(text)) return "Objetivo não encontrado (a página pode estar desatualizada).";
+      const set = new Set(done);
+      if (checked) set.add(text);
+      else set.delete(text);
+      return { goals, done: [...set] };
+    },
+    { textChange: false }
+  );
+}
+
+export async function renameGoal(opportunityId: string, oldText: string, newText: string): Promise<GoalResult> {
+  const t = newText.trim();
+  if (!t) return { ok: false, error: "O objetivo não pode ficar vazio." };
+  return mutateGoals(
+    opportunityId,
+    (goals, done) => {
+      const i = goals.indexOf(oldText);
+      if (i < 0) return "Objetivo não encontrado (a página pode estar desatualizada).";
+      if (t !== oldText && goals.includes(t)) return "Esse objetivo já está na lista.";
+      goals[i] = t;
+      return { goals, done: done.map((d) => (d === oldText ? t : d)) };
+    },
+    { textChange: true }
+  );
+}
+
+export async function removeGoal(opportunityId: string, text: string): Promise<GoalResult> {
+  return mutateGoals(
+    opportunityId,
+    (goals, done) => ({ goals: goals.filter((g) => g !== text), done: done.filter((d) => d !== text) }),
+    { textChange: true }
+  );
 }

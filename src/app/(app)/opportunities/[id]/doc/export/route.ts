@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { opportunities, productDocs, userStories, hypotheses } from "@/db/schema";
 import { eq, asc } from "drizzle-orm";
 import { getPageContext } from "@/lib/page-context";
+import { goalsProgress } from "@/lib/goals-progress";
 
 const PRIORITY_LABELS: Record<string, string> = {
   must: "Deve ter",
@@ -43,9 +44,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   lines.push("## Problema", "", opp.problemRef || opp.description || "Não descrito.", "");
 
-  lines.push("## Objetivos", "");
   const goals = (doc?.goals as string[]) ?? [];
-  if (goals.length) goals.forEach((g) => lines.push(`- ${g}`));
+  const gp = goalsProgress(goals, doc?.goalsDone as string[]);
+  lines.push(`## Objetivos${gp.total ? ` (${gp.done}/${gp.total} · ${gp.percent}%)` : ""}`, "");
+  const doneSet = new Set((doc?.goalsDone as string[]) ?? []);
+  if (goals.length) goals.forEach((g) => lines.push(`- [${doneSet.has(g) ? "x" : " "}] ${g}`));
   else lines.push("_Nenhum definido ainda._");
   lines.push("");
 
@@ -54,6 +57,19 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (nonGoals.length) nonGoals.forEach((g) => lines.push(`- ${g}`));
   else lines.push("_Nenhum definido ainda._");
   lines.push("");
+
+  const businessRules = (doc?.businessRules as string[]) ?? [];
+  if (businessRules.length) {
+    lines.push("## Regras de negócio", "");
+    businessRules.forEach((r) => lines.push(`- ${r}`));
+    lines.push("");
+  }
+  const successMetrics = (doc?.successMetrics as string[]) ?? [];
+  if (successMetrics.length) {
+    lines.push("## Métricas de sucesso", "");
+    successMetrics.forEach((m) => lines.push(`- ${m}`));
+    lines.push("");
+  }
 
   if (doc?.flowText) {
     lines.push("## Fluxo do processo", "", doc.flowText, "");

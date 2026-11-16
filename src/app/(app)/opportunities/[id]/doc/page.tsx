@@ -18,6 +18,7 @@ import {
   Textarea,
 } from "@/components/ui/primitives";
 import { arrayToLines } from "@/lib/list-utils";
+import { GoalsChecklist } from "./goals-checklist";
 import { ImageUploader } from "@/components/image-uploader";
 import { featureWebUrl } from "@/lib/azure-devops";
 import {
@@ -87,15 +88,15 @@ export default async function ProductDocPage({
   const unconfirmedCount = stories.filter((s) => s.aiGenerated && !s.confirmed).length;
 
   return (
-    <div className="max-w-3xl space-y-4">
+    <div className="max-w-7xl space-y-4">
       <PageHeader
         title={`PRD & User Stories — ${opp.title}`}
         description="Rascunho estruturado ligado ao que já foi validado nesta oportunidade — nunca substitui a revisão humana antes de ir para engenharia."
         actions={
           <>
-            <Link href={`/opportunities/${id}/doc/export`} target="_blank">
-              <Button variant="secondary">Exportar Markdown</Button>
-            </Link>
+            <a href={`/opportunities/${id}/doc/export`} download>
+              <Button variant="secondary">⬇ Baixar PRD (.md)</Button>
+            </a>
             <Link href={`/opportunities/${id}`}>
               <Button variant="secondary">← Voltar à oportunidade</Button>
             </Link>
@@ -136,41 +137,50 @@ export default async function ProductDocPage({
           )}
         </div>
 
+        <div className="mb-5 rounded-lg border border-slate-200 bg-slate-50/60 p-4">
+          <GoalsChecklist
+            opportunityId={id}
+            initialGoals={(doc?.goals as string[]) ?? []}
+            initialDone={(doc?.goalsDone as string[]) ?? []}
+            canEdit={canEdit}
+          />
+        </div>
+
         {canEdit ? (
-          <form action={updateProductDoc.bind(null, id)} className="space-y-3">
-            <Field>
-              <Label>Objetivos (um por linha)</Label>
-              <Textarea name="goals" rows={3} defaultValue={arrayToLines(doc?.goals as string[])} />
-            </Field>
-            <Field>
-              <Label>Fora de escopo (um por linha)</Label>
-              <Textarea name="nonGoals" rows={3} defaultValue={arrayToLines(doc?.nonGoals as string[])} />
-            </Field>
-            <Field>
-              <Label>Perguntas em aberto (uma por linha)</Label>
-              <Textarea name="openQuestions" rows={3} defaultValue={arrayToLines(doc?.openQuestions as string[])} />
-            </Field>
-            <Field>
-              <Label>Business Rules (uma por linha)</Label>
-              <Textarea name="businessRules" rows={3} defaultValue={arrayToLines(doc?.businessRules as string[])} />
-            </Field>
-            <Field>
-              <Label>Success Metrics (uma por linha)</Label>
-              <Textarea name="successMetrics" rows={3} defaultValue={arrayToLines(doc?.successMetrics as string[])} />
-            </Field>
-            <Field>
-              <Label>Fluxo do processo, passo a passo</Label>
-              <Textarea
-                name="flowText"
-                rows={14}
-                defaultValue={doc?.flowText ?? ""}
-                placeholder={"## Fluxo 1 · Nome do fluxo\n1. Primeiro passo.\n2. Segundo passo. Se não, ...\n   Detalhe recuado com espaços."}
-              />
-              <p className="mt-1 text-xs text-slate-400">
-                Uma linha por passo. Linha começando com &quot;## &quot; vira subtítulo. Vai para a Description do card no Azure
-                DevOps, junto com as imagens abaixo.
-              </p>
-            </Field>
+          <form action={updateProductDoc.bind(null, id)}>
+            <div className="grid grid-cols-1 gap-x-8 gap-y-1 lg:grid-cols-2">
+              <Field>
+                <Label>Fora de escopo (um por linha)</Label>
+                <Textarea name="nonGoals" rows={3} defaultValue={arrayToLines(doc?.nonGoals as string[])} />
+              </Field>
+              <Field>
+                <Label>Perguntas em aberto (uma por linha)</Label>
+                <Textarea name="openQuestions" rows={3} defaultValue={arrayToLines(doc?.openQuestions as string[])} />
+              </Field>
+              <Field>
+                <Label>Business Rules (uma por linha)</Label>
+                <Textarea name="businessRules" rows={3} defaultValue={arrayToLines(doc?.businessRules as string[])} />
+              </Field>
+              <Field>
+                <Label>Success Metrics (uma por linha)</Label>
+                <Textarea name="successMetrics" rows={3} defaultValue={arrayToLines(doc?.successMetrics as string[])} />
+              </Field>
+              <div className="lg:col-span-2">
+                <Field>
+                  <Label>Fluxo do processo, passo a passo</Label>
+                  <Textarea
+                    name="flowText"
+                    rows={8}
+                    defaultValue={doc?.flowText ?? ""}
+                    placeholder={"## Fluxo 1 · Nome do fluxo\n1. Primeiro passo.\n2. Segundo passo. Se não, ...\n   Detalhe recuado com espaços."}
+                  />
+                  <p className="mt-1 text-xs text-slate-400">
+                    Uma linha por passo. Linha começando com &quot;## &quot; vira subtítulo. Vai para a Description do card no Azure
+                    DevOps, junto com as imagens abaixo.
+                  </p>
+                </Field>
+              </div>
+            </div>
             <div className="flex gap-2">
               <Button type="submit" size="sm">
                 Salvar
@@ -183,9 +193,8 @@ export default async function ProductDocPage({
             </div>
           </form>
         ) : (
-          <div className="space-y-3 text-sm text-slate-700">
+          <div className="grid grid-cols-1 gap-x-8 gap-y-3 text-sm text-slate-700 lg:grid-cols-2">
             {[
-              ["Objetivos", doc?.goals as string[] | undefined],
               ["Fora de escopo", doc?.nonGoals as string[] | undefined],
               ["Perguntas em aberto", doc?.openQuestions as string[] | undefined],
               ["Business Rules", doc?.businessRules as string[] | undefined],
@@ -204,7 +213,7 @@ export default async function ProductDocPage({
                 )}
               </div>
             ))}
-            <div>
+            <div className="lg:col-span-2">
               <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Fluxo do processo</p>
               {doc?.flowText ? (
                 <pre className="whitespace-pre-wrap font-sans">{doc.flowText}</pre>
@@ -216,6 +225,7 @@ export default async function ProductDocPage({
         )}
       </Card>
 
+      <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-2">
       <Card>
         <div className="mb-3 flex items-center justify-between">
           <p className="text-sm font-semibold text-slate-700">
@@ -365,6 +375,7 @@ export default async function ProductDocPage({
         )}
       </Card>
 
+        <div className="space-y-4">
       <Card>
         <p className="mb-1 text-sm font-semibold text-slate-700">Fluxos e imagens de apoio ({images.length})</p>
         <p className="mb-3 text-xs text-slate-500">
@@ -470,6 +481,9 @@ export default async function ProductDocPage({
           )}
         </Card>
       )}
+
+        </div>
+      </div>
 
       {hypothesis && (
         <p className="text-xs text-slate-400">

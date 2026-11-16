@@ -1,5 +1,6 @@
 "use client";
 
+import { ProgressBar } from "@/components/progress-bar";
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { Badge, Card } from "@/components/ui/primitives";
@@ -19,6 +20,9 @@ export type OpportunityCardData = {
   priorityScore: string | null;
   evidenceConfidence: number;
   tags?: string[];
+  // Checklist de objetivos do PRD (0 = sem objetivos ainda).
+  goalsTotal?: number;
+  goalsDone?: number;
 };
 
 export type OpportunityColumnDef = { value: string; label: string };
@@ -202,6 +206,19 @@ export function OpportunityBoard({
                           <p className="text-sm font-medium text-slate-900">{o.title}</p>
                           {o.hypothesisTitle && <p className="mt-1 text-xs text-slate-400">Hipótese: {o.hypothesisTitle}</p>}
                           {o.personaName && <Badge color="indigo">{o.personaName}</Badge>}
+                          {!!o.goalsTotal && (
+                            <div className="mt-2">
+                              <div className="mb-1 flex items-center justify-between text-[11px] text-slate-500">
+                                <span>
+                                  Objetivos {o.goalsDone ?? 0}/{o.goalsTotal}
+                                </span>
+                                <span className="font-semibold text-slate-700">
+                                  {Math.round(((o.goalsDone ?? 0) / o.goalsTotal) * 100)}%
+                                </span>
+                              </div>
+                              <ProgressBar percent={Math.round(((o.goalsDone ?? 0) / o.goalsTotal) * 100)} />
+                            </div>
+                          )}
                           <div className="mt-2 flex items-center justify-between">
                             <span className="text-xs font-semibold text-slate-700">Score: {o.priorityScore ?? "—"}</span>
                             <span className="text-xs text-slate-400">Evidência: {o.evidenceConfidence}%</span>

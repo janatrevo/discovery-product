@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { getPageContext } from "@/lib/page-context";
 import { db } from "@/db";
-import { opportunities, personas, hypotheses } from "@/db/schema";
+import { opportunities, personas, hypotheses, productDocs } from "@/db/schema";
 import { eq, asc, desc } from "drizzle-orm";
 import { Button, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { OpportunityBoard, type OpportunityCardData } from "@/components/opportunity-board";
 import { RoadmapView } from "@/components/roadmap-view";
+import { goalsProgress } from "@/lib/goals-progress";
 
 const COLUMNS: { value: string; label: string }[] = [
   { value: "new", label: "Novas" },
@@ -58,7 +59,7 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
   }
   const byScore = ordem === "score";
 
-  const [list, personaList, hypothesisList] = await Promise.all([
+  const [list, personaList, hypothesisList, docRows] = await Promise.all([
     db
       .select()
       .from(opportunities)
@@ -70,7 +71,15 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
       ),
     db.select().from(personas).where(eq(personas.projectId, project.id)),
     db.select().from(hypotheses).where(eq(hypotheses.projectId, project.id)),
+    db
+      .select({ opportunityId: productDocs.opportunityId, goals: productDocs.goals, goalsDone: productDocs.goalsDone })
+      .from(productDocs)
+      .innerJoin(opportunities, eq(opportunities.id, productDocs.opportunityId))
+      .where(eq(opportunities.projectId, project.id)),
   ]);
+  const progressByOpp = new Map(
+    docRows.map((d) => [d.opportunityId, goalsProgress(d.goals as string[], d.goalsDone as string[])])
+  );
 
   const personaName = (id: string | null) => personaList.find((p) => p.id === id)?.name;
   const hypothesisTitle = (id: string | null) => hypothesisList.find((h) => h.id === id)?.title;
@@ -87,6 +96,8 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
         priorityScore: o.priorityScore,
         evidenceConfidence: o.evidenceConfidence ?? 0,
         tags: o.tags ?? [],
+        goalsTotal: progressByOpp.get(o.id)?.total ?? 0,
+        goalsDone: progressByOpp.get(o.id)?.done ?? 0,
       }));
   }
 

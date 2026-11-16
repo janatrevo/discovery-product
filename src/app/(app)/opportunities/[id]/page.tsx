@@ -1,13 +1,15 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { db } from "@/db";
-import { opportunities, personas, hypotheses, userStories } from "@/db/schema";
+import { opportunities, personas, hypotheses, userStories, productDocs } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { getPageContext } from "@/lib/page-context";
 import { featureWebUrl } from "@/lib/azure-devops";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { TagsInput } from "@/components/tags-input";
 import { tagColor } from "@/lib/tags";
+import { goalsProgress } from "@/lib/goals-progress";
+import { ProgressBar } from "@/components/progress-bar";
 import { Badge, Button, Card, Field, Input, Label, PageHeader, Select, Textarea } from "@/components/ui/primitives";
 import {
   updateOpportunityScores,
@@ -66,12 +68,14 @@ export default async function OpportunityDetailPage({
   const [opp] = await db.select().from(opportunities).where(eq(opportunities.id, id)).limit(1);
   if (!opp || opp.projectId !== project.id) notFound();
 
-  const [persona, hypothesis] = await Promise.all([
+  const [persona, hypothesis, prdDoc] = await Promise.all([
     opp.personaId ? db.select().from(personas).where(eq(personas.id, opp.personaId)).limit(1).then((r) => r[0]) : null,
     opp.hypothesisId
       ? db.select().from(hypotheses).where(eq(hypotheses.id, opp.hypothesisId)).limit(1).then((r) => r[0])
       : null,
+    db.select().from(productDocs).where(eq(productDocs.opportunityId, id)).limit(1).then((r) => r[0]),
   ]);
+  const progress = goalsProgress(prdDoc?.goals as string[], prdDoc?.goalsDone as string[]);
 
   const tagRows = await db.select({ tags: opportunities.tags }).from(opportunities).where(eq(opportunities.projectId, project.id));
   const knownTags = [...new Set(tagRows.flatMap((r) => r.tags ?? []))].sort((a, b) => a.localeCompare(b, "pt-BR", { numeric: true }));
@@ -91,7 +95,7 @@ export default async function OpportunityDetailPage({
     `\nEssa ação não pode ser desfeita.`;
 
   return (
-    <div className="max-w-3xl space-y-4">
+    <div className="max-w-7xl space-y-4">
       <PageHeader
         title={opp.title}
         description={opp.problemRef ?? undefined}
@@ -118,8 +122,9 @@ export default async function OpportunityDetailPage({
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <Card className="md:col-span-2">
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-3">
+        <div className="space-y-4 lg:col-span-2">
+        <Card>
           <p className="text-sm text-slate-700">{opp.description || "Sem descrição."}</p>
           <div className="mt-3 flex flex-wrap gap-2">
             {hypothesis && <Badge color="indigo">Hipótese: {hypothesis.title}</Badge>}
@@ -151,38 +156,6 @@ export default async function OpportunityDetailPage({
             )}
           </div>
         </Card>
-        <Card>
-          <p className="text-xs text-slate-500">Score de priorização</p>
-          <p className="text-3xl font-semibold text-slate-900">{opp.priorityScore ?? "—"}</p>
-          <p className="mt-2 text-xs text-slate-500">
-            Confiança de evidência herdada: <strong>{opp.evidenceConfidence}%</strong>
-          </p>
-          <p className="mt-2 text-[11px] leading-snug text-slate-400">
-            Score = média(impacto, frequência, severidade, potencial de negócio, facilidade) × fator de
-            confiança de evidência (50%–100%). Oportunidades sem hipótese/evidência real vinculada nunca
-            atingem o multiplicador máximo.
-          </p>
-        </Card>
-      </div>
-
-      <Card>
-        <p className="mb-2 text-sm font-semibold text-slate-700">Status</p>
-        <form action={updateOpportunityStatus.bind(null, opp.id)} className="flex items-center gap-2">
-          <Select name="status" defaultValue={opp.status} disabled={!canEdit} className="w-48">
-            {STATUS_OPTIONS.map((s) => (
-              <option key={s.value} value={s.value}>
-                {s.label}
-              </option>
-            ))}
-          </Select>
-          {canEdit && (
-            <Button type="submit" size="sm" variant="secondary">
-              Atualizar status
-            </Button>
-          )}
-        </form>
-      </Card>
-
       {canEdit && (
         <Card>
           <p className="mb-3 text-sm font-semibold text-slate-700">Editar oportunidade</p>
@@ -268,6 +241,57 @@ export default async function OpportunityDetailPage({
         </Card>
       )}
 
+        </div>
+        <div className="space-y-4">
+        <Card>
+          <p className="text-xs text-slate-500">Score de priorização</p>
+          <p className="text-3xl font-semibold text-slate-900">{opp.priorityScore ?? "—"}</p>
+          <p className="mt-2 text-xs text-slate-500">
+            Confiança de evidência herdada: <strong>{opp.evidenceConfidence}%</strong>
+          </p>
+          <p className="mt-2 text-[11px] leading-snug text-slate-400">
+            Score = média(impacto, frequência, severidade, potencial de negócio, facilidade) × fator de
+            confiança de evidência (50%–100%). Oportunidades sem hipótese/evidência real vinculada nunca
+            atingem o multiplicador máximo.
+          </p>
+        </Card>
+        <Card>
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-sm font-semibold text-slate-700">Progresso dos objetivos</p>
+            <Link href={`/opportunities/${opp.id}/doc`} className="text-xs text-indigo-600 hover:underline">
+              abrir checklist
+            </Link>
+          </div>
+          {progress.total === 0 ? (
+            <p className="text-xs text-slate-400">Ainda sem objetivos no PRD. Adicione-os na tela do PRD para acompanhar o percentual.</p>
+          ) : (
+            <>
+              <p className="mb-2 text-3xl font-semibold text-slate-900">{progress.percent}%</p>
+              <ProgressBar percent={progress.percent} />
+              <p className="mt-2 text-xs text-slate-500">
+                {progress.done} de {progress.total} objetivos concluídos
+              </p>
+            </>
+          )}
+        </Card>
+      <Card>
+        <p className="mb-2 text-sm font-semibold text-slate-700">Status</p>
+        <form action={updateOpportunityStatus.bind(null, opp.id)} className="flex items-center gap-2">
+          <Select name="status" defaultValue={opp.status} disabled={!canEdit} className="w-48">
+            {STATUS_OPTIONS.map((s) => (
+              <option key={s.value} value={s.value}>
+                {s.label}
+              </option>
+            ))}
+          </Select>
+          {canEdit && (
+            <Button type="submit" size="sm" variant="secondary">
+              Atualizar status
+            </Button>
+          )}
+        </form>
+      </Card>
+
       {opp.azureFeatureId && (
         <Card>
           <div className="mb-3 flex items-center justify-between">
@@ -337,6 +361,8 @@ export default async function OpportunityDetailPage({
           )}
         </Card>
       )}
+        </div>
+      </div>
     </div>
   );
 }
