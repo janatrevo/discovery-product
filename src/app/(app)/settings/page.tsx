@@ -2,12 +2,13 @@ import { getPageContext } from "@/lib/page-context";
 import { db } from "@/db";
 import { projectMemberships, users } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { Badge, Button, Card, Field, Input, Label, PageHeader, Select } from "@/components/ui/primitives";
-import { updateThresholds, inviteMember, removeMember } from "./actions";
+import { Badge, Button, Card, Field, Input, Label, PageHeader } from "@/components/ui/primitives";
+import { updateThresholds, removeMember } from "./actions";
+import { CreateAccessForm, ResetPasswordButton } from "./member-access";
 import Link from "next/link";
 
 export default async function SettingsPage() {
-  const { project, role } = await getPageContext();
+  const { user, project, role } = await getPageContext();
 
   const members = await db
     .select({ user: users, role: projectMemberships.role })
@@ -83,13 +84,17 @@ export default async function SettingsPage() {
         <p className="mb-3 text-sm font-semibold text-slate-700">Membros do projeto</p>
         <ul className="mb-4 divide-y divide-slate-100">
           {members.map((m) => (
-            <li key={m.user.id} className="flex items-center justify-between py-2">
+            <li key={m.user.id} className="flex items-start justify-between gap-3 py-2">
               <div>
                 <p className="text-sm text-slate-700">{m.user.name}</p>
                 <p className="text-xs text-slate-400">{m.user.email}</p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-start gap-2">
+                {m.user.mustChangePassword && <Badge color="amber">senha temporária</Badge>}
                 <Badge color="indigo">{m.role}</Badge>
+                {role === "owner" && m.user.id !== user.id && (
+                  <ResetPasswordButton userId={m.user.id} email={m.user.email} />
+                )}
                 {role === "owner" && (
                   <form action={removeMember.bind(null, m.user.id)}>
                     <Button type="submit" size="sm" variant="ghost">
@@ -101,28 +106,11 @@ export default async function SettingsPage() {
             </li>
           ))}
         </ul>
+        {role === "owner" && <CreateAccessForm />}
         {role === "owner" && (
-          <form action={inviteMember} className="flex items-end gap-2">
-            <div className="flex-1">
-              <Label>E-mail de quem você quer convidar</Label>
-              <Input name="email" type="email" required />
-            </div>
-            <div className="w-40">
-              <Label>Papel</Label>
-              <Select name="role" defaultValue="contributor">
-                <option value="viewer">Viewer</option>
-                <option value="contributor">Contributor</option>
-                <option value="editor">Editor</option>
-                <option value="owner">Owner</option>
-              </Select>
-            </div>
-            <Button type="submit">Adicionar</Button>
-          </form>
-        )}
-        {role === "owner" && (
-          <p className="mt-2 text-xs text-slate-400">
-            Se a pessoa ainda não tiver conta, enviamos um convite por e-mail para ela criar a senha e
-            entrar direto neste projeto, no papel escolhido.
+          <p className="mt-3 text-xs text-slate-400">
+            Criamos a conta na hora e mostramos uma senha temporária para você enviar à pessoa. No primeiro
+            acesso ela é obrigada a trocar por uma senha própria.
           </p>
         )}
       </Card>

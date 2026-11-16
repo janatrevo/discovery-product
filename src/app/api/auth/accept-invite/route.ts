@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
     ? (
         await db
           .update(users)
-          .set({ passwordHash, ...(name ? { name } : {}) })
+          .set({ passwordHash, mustChangePassword: false, ...(name ? { name } : {}) })
           .where(eq(users.id, existing.id))
           .returning()
       )[0]

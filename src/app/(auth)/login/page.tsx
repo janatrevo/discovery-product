@@ -26,7 +26,8 @@ export default function LoginPage() {
       setError(data.error || "Não foi possível entrar.");
       return;
     }
-    router.push("/dashboard");
+    const data = await res.json().catch(() => ({}));
+    router.push(data.mustChangePassword ? "/trocar-senha" : "/dashboard");
     router.refresh();
   }
 

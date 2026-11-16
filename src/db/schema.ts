@@ -139,6 +139,9 @@ export const users = pgTable("users", {
   email: varchar("email", { length: 255 }).notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   name: varchar("name", { length: 255 }).notNull(),
+  // true enquanto a pessoa ainda usa a senha temporária gerada por um Owner
+  // (Settings > Membros). O login leva direto para /trocar-senha.
+  mustChangePassword: boolean("must_change_password").notNull().default(false),
   createdAt: createdAt(),
 });
 
