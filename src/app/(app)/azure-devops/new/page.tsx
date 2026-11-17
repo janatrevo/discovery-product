@@ -13,8 +13,8 @@ export default async function NewAzureFeaturePage() {
         title="Nova Feature — Azure DevOps"
         description="Cria um card do tipo Feature diretamente no board Trevo One."
       />
-      <Card className="max-w-2xl">
-        <form action={createAzureFeature}>
+      <Card className="">
+        <form className="form-cols" action={createAzureFeature}>
           <Field>
             <Label>Título</Label>
             <Input name="title" required autoFocus />

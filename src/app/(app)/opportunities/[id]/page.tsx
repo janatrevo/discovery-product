@@ -95,7 +95,7 @@ export default async function OpportunityDetailPage({
     `\nEssa ação não pode ser desfeita.`;
 
   return (
-    <div className="max-w-7xl space-y-4">
+    <div className="space-y-4">
       <PageHeader
         title={opp.title}
         description={opp.problemRef ?? undefined}

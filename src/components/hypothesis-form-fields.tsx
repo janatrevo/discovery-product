@@ -24,7 +24,7 @@ export function HypothesisFormFields({
   const productNameById = new Map(productOptions.map((p) => [p.id, p.name]));
 
   return (
-    <div className="space-y-4">
+    <div className="page-masonry">
       <Card>
         <Field>
           <Label>Título da hipótese</Label>

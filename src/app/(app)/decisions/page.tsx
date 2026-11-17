@@ -16,7 +16,7 @@ export default async function DecisionsPage() {
   const opportunityTitle = (id: string | null) => opportunityList.find((o) => o.id === id)?.title;
 
   return (
-    <div className="max-w-3xl">
+    <div>
       <PageHeader
         title="Decision Log"
         description="Registro append-only de decisões de produto — sempre com racional e vínculo à evidência/hipótese que sustentou a escolha."
@@ -38,7 +38,7 @@ export default async function DecisionsPage() {
           }
         />
       ) : (
-        <div className="space-y-3">
+        <div className="card-grid">
           {list.map((d) => (
             <Link key={d.id} href={`/decisions/${d.id}`}>
               <Card className="hover:shadow-md">

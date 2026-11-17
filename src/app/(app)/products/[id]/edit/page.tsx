@@ -16,7 +16,7 @@ export default async function EditProductPage({ params }: { params: Promise<{ id
   return (
     <div>
       <PageHeader title={`Editar: ${product.name}`} />
-      <form action={updateProduct.bind(null, id)} className="max-w-3xl">
+      <form action={updateProduct.bind(null, id)}>
         <ProductFormFields defaultValues={product} />
         <div className="mt-6 flex gap-2">
           <Button type="submit">Salvar</Button>

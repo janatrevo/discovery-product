@@ -25,7 +25,7 @@ export default async function EditAzureFeaturePage({ params }: { params: Promise
     return (
       <div>
         <PageHeader title={`Editar Feature #${featureId}`} />
-        <Card className="max-w-2xl">
+        <Card className="">
           <p className="text-sm text-red-600">
             {err instanceof Error ? err.message : "Não foi possível carregar esta Feature do Azure DevOps."}
           </p>
@@ -68,7 +68,7 @@ export default async function EditAzureFeaturePage({ params }: { params: Promise
         title={`Editar Feature #${feature.id}`}
         description="As alterações são salvas direto no board Trevo One do Azure DevOps."
       />
-      <Card className="max-w-2xl">
+      <Card className="">
         <form action={updateAzureFeature.bind(null, featureId)}>
           <Field>
             <Label>Título</Label>
@@ -111,7 +111,7 @@ export default async function EditAzureFeaturePage({ params }: { params: Promise
       </Card>
 
       {linkedOpportunity ? (
-        <Card className="mt-4 max-w-2xl">
+        <Card className="mt-4">
           <div className="mb-3 flex items-center justify-between gap-2">
             <p className="text-sm font-semibold text-slate-700">
               Campos do PRD — oportunidade &quot;{linkedOpportunity.title}&quot;
@@ -156,7 +156,7 @@ export default async function EditAzureFeaturePage({ params }: { params: Promise
           </form>
         </Card>
       ) : (
-        <Card className="mt-4 max-w-2xl border-amber-300 bg-amber-50">
+        <Card className="mt-4 border-amber-300 bg-amber-50">
           <p className="text-sm text-amber-800">
             <Badge color="amber">Card manual</Badge> Este card não veio de uma oportunidade do discovery-app,
             então não tem Business Rules/Acceptance Criteria/Success Metrics para gerar. Para um card completo

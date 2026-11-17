@@ -19,14 +19,14 @@ export default async function NewUsabilityTestPage({
   ]);
 
   return (
-    <div className="max-w-2xl">
+    <div>
       <PageHeader
         title="Usability / Image Test Studio"
         description={hyp ? `Para a hipótese: ${hyp.title}` : "Envie um screenshot, wireframe ou protótipo para análise por persona"}
       />
       <SimulationBanner mode="image" />
       <Card className="mt-4">
-        <form action={createUsabilityTest.bind(null, hypothesisId ?? null)} encType="multipart/form-data">
+        <form className="form-cols" action={createUsabilityTest.bind(null, hypothesisId ?? null)} encType="multipart/form-data">
           <Field>
             <Label>Título</Label>
             <Input name="title" placeholder="Ex.: Tela de onboarding v2" />

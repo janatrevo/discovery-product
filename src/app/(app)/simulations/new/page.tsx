@@ -20,14 +20,14 @@ export default async function NewSimulationPage({
   ]);
 
   return (
-    <div className="max-w-2xl">
+    <div>
       <PageHeader
         title="Simulation Studio"
         description={hyp ? `Exploração para: ${hyp.title}` : "Exploração de perspectiva de persona sobre um cenário"}
       />
       <SimulationBanner mode="scenario" />
       <Card className="mt-4">
-        <form action={runSimulation.bind(null, hypothesisId ?? null)}>
+        <form className="form-cols" action={runSimulation.bind(null, hypothesisId ?? null)}>
           <Field>
             <Label>Personas (selecione uma ou mais)</Label>
             <select name="personaIds" multiple required className="h-32 w-full rounded-md border border-slate-300 px-3 py-2 text-sm">

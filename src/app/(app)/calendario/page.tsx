@@ -100,7 +100,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   const marks = marksByDay(visible, today);
 
   return (
-    <div className="max-w-6xl">
+    <div>
       <PageHeader
         title="Calendário do projeto"
         description="Tudo o que acontece no Trevo One em um só lugar: o que você registra aqui e o que o app já sabe (oportunidades, user stories, pesquisas, entrevistas, campo e decisões). Os relatórios abaixo se atualizam sozinhos."

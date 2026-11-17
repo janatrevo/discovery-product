@@ -10,7 +10,7 @@ export default async function ReportsPage() {
   const list = await db.select().from(reports).where(eq(reports.projectId, project.id)).orderBy(desc(reports.createdAt));
 
   return (
-    <div className="max-w-2xl">
+    <div>
       <PageHeader
         title="Reports"
         description="Snapshots do estado do discovery — geradas diretamente dos dados do projeto, nunca por IA, para servir como registro confiável de um momento no tempo."
@@ -32,7 +32,7 @@ export default async function ReportsPage() {
           }
         />
       ) : (
-        <div className="space-y-3">
+        <div className="card-grid">
           {list.map((r) => (
             <Link key={r.id} href={`/reports/${r.id}`}>
               <Card className="hover:shadow-md">

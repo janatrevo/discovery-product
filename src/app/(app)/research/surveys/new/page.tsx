@@ -11,7 +11,7 @@ export default async function NewSurveyPage({
     <div className="max-w-lg">
       <PageHeader title="Novo survey" description="Pesquisa quantitativa — objetivo e hipótese primeiro, questionário depois." />
       <Card>
-        <form action={createSurvey}>
+        <form className="form-cols" action={createSurvey}>
           <input type="hidden" name="hypothesisId" value={hypothesisId ?? ""} />
           <Field>
             <Label>Título</Label>

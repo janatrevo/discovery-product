@@ -6,7 +6,7 @@ type Product = typeof products.$inferSelect;
 
 export function ProductFormFields({ defaultValues: d }: { defaultValues?: Product }) {
   return (
-    <div className="space-y-4">
+    <div className="page-masonry">
       <Card>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field>

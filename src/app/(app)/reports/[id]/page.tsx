@@ -32,7 +32,7 @@ export default async function ReportDetailPage({ params }: { params: Promise<{ i
   const content = report.content as ReportContent;
 
   return (
-    <div className="max-w-3xl space-y-4">
+    <div className="page-masonry">
       <PageHeader
         title={report.title}
         description={`Gerado em ${new Date(content.generatedAt).toLocaleString("pt-BR")}`}

@@ -80,7 +80,7 @@ export default async function InterviewDetailPage({
   }
 
   return (
-    <div className="grid max-w-5xl grid-cols-1 gap-4 lg:grid-cols-2">
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       <Card className="lg:col-span-2">
         <PageHeader title={`Entrevista — ${interviewLabel(interview) || "sem identificação"}`} />
         <dl className="mb-4 grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">

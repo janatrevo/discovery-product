@@ -23,7 +23,7 @@ export default async function SimulationsPage() {
   const productName = (id: string | null) => productList.find((p) => p.id === id)?.name;
 
   return (
-    <div className="max-w-3xl">
+    <div>
       <PageHeader
         title="Persona Simulation Engine"
         description="Simulações de cenário com IA respondendo como uma persona reagiria — sinal exploratório para gerar hipóteses, nunca evidência de validação."
@@ -40,7 +40,7 @@ export default async function SimulationsPage() {
           }
         />
       ) : (
-        <div className="mt-4 space-y-2">
+        <div className="card-grid">
           {list.map((s) => (
             <Card key={s.id} className="hover:shadow-md">
               <div className="flex items-start justify-between gap-2">

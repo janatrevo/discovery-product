@@ -25,7 +25,7 @@ export default async function DecisionDetailPage({ params }: { params: Promise<{
   ]);
 
   return (
-    <div className="max-w-2xl space-y-4">
+    <div className="page-masonry">
       <PageHeader
         title={decision.decisionText}
         description={`Decidido em ${new Date(decision.decidedAt).toLocaleString("pt-BR")}`}

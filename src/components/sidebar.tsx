@@ -18,6 +18,7 @@ import {
   Kanban,
   BookOpen,
   CalendarDays,
+  X,
 } from "lucide-react";
 import { useProductTour } from "./product-tour";
 
@@ -44,16 +45,31 @@ const NAV = [
   { href: "/settings", label: "Settings", icon: Settings, tourId: "nav-settings" },
 ];
 
-export function Sidebar() {
+export function Sidebar({ open = false, onClose }: { open?: boolean; onClose?: () => void }) {
   const pathname = usePathname();
   const { start } = useProductTour();
   return (
+    <>
+    {/* Fundo escuro atrás da gaveta (só celular/tablet). */}
+    {open && <div className="fixed inset-0 z-30 bg-black/40 lg:hidden" onClick={onClose} aria-hidden="true" />}
     <aside
-      className="flex w-60 shrink-0 flex-col text-white"
+      className={clsx(
+        "fixed inset-y-0 left-0 z-40 flex w-64 max-w-[85vw] shrink-0 flex-col text-white transition-transform duration-200",
+        "lg:static lg:z-auto lg:w-60 lg:max-w-none lg:translate-x-0",
+        open ? "translate-x-0" : "-translate-x-full"
+      )}
       style={{ background: "linear-gradient(180deg, #8B42FF 0%, #6518E5 100%)" }}
     >
-      <div className="flex h-14 items-center px-4">
+      <div className="flex h-14 items-center justify-between px-4">
         <Image src="/trevo-logo.png" alt="Trevo" width={110} height={25} priority className="h-6 w-auto" />
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-md p-1 text-white/80 hover:bg-white/10 lg:hidden"
+          aria-label="Fechar menu"
+        >
+          <X size={18} />
+        </button>
       </div>
       <nav className="flex-1 space-y-0.5 overflow-y-auto p-3">
         {NAV.map((item) => {
@@ -87,5 +103,6 @@ export function Sidebar() {
         </p>
       </div>
     </aside>
+    </>
   );
 }

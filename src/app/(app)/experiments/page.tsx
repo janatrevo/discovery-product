@@ -21,7 +21,7 @@ export default async function ExperimentsPage() {
   const hypothesisTitle = (id: string) => hypothesisList.find((h) => h.id === id)?.title;
 
   return (
-    <div className="max-w-3xl">
+    <div>
       <PageHeader
         title="Experimentos"
         description="Todo experimento nasce vinculado a uma hipótese, com critério de sucesso travado antes do resultado — evita mover o alvo depois de ver o dado."
@@ -37,7 +37,7 @@ export default async function ExperimentsPage() {
           }
         />
       ) : (
-        <div className="space-y-2">
+        <div className="card-grid">
           {list.map((e) => (
             <Link key={e.id} href={`/experiments/${e.id}`}>
               <Card className="hover:shadow-md">

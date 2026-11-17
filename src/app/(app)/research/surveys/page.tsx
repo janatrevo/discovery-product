@@ -20,7 +20,7 @@ export default async function SurveysPage() {
   const hypothesesBySurvey = await hypothesesBySurveyIds(list.map((s) => s.id));
 
   return (
-    <div className="max-w-3xl">
+    <div>
       <PageHeader
         title="Surveys"
         description="Pesquisa quantitativa — cada pergunta passa por um checador de viés antes de publicar; perguntas tendenciosas ficam marcadas mesmo depois."
@@ -36,7 +36,7 @@ export default async function SurveysPage() {
           }
         />
       ) : (
-        <div className="space-y-2">
+        <div className="card-grid">
           {list.map((s) => {
             // "expirado" aqui é só um rótulo calculado pra exibição — não
             // grava nada. O status de verdade só vira "closed" no banco

@@ -110,7 +110,7 @@ export function ResetPasswordButton({ userId, email }: { userId: string; email: 
       </Button>
       {result?.error && <p className="mt-1 max-w-xs text-right text-xs text-red-600">{result.error}</p>}
       {result?.password && (
-        <div className="mt-2 w-72 rounded-lg border border-amber-200 bg-amber-50 p-2 text-left">
+        <div className="mt-2 w-full max-w-72 rounded-lg border border-amber-200 bg-amber-50 p-2 text-left">
           <p className="text-xs font-semibold text-amber-900">Nova senha de {email}</p>
           <div className="mt-1 flex items-center gap-2">
             <code className="rounded bg-white px-2 py-1 text-sm font-semibold select-all">{result.password}</code>

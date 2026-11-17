@@ -13,7 +13,7 @@ export default async function NewPersonaPage() {
   return (
     <div>
       <PageHeader title="Nova persona" description="Preencha ao menos o bloco essencial — o resto pode vir depois." />
-      <form action={createPersona} className="max-w-3xl">
+      <form action={createPersona}>
         <PersonaFormFields products={productList} />
         <div className="mt-6 flex gap-2">
           <Button type="submit">Criar persona</Button>

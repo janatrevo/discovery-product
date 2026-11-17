@@ -17,7 +17,7 @@ export default async function SettingsPage() {
     .where(eq(projectMemberships.projectId, project.id));
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="page-masonry">
       <PageHeader
         title="Settings"
         description="Configurações do projeto, membros e limiares de confiança."

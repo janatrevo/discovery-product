@@ -9,7 +9,7 @@ export default async function NewReportPage() {
         description="O relatório é um snapshot do projeto inteiro no momento da geração: hipóteses, evidências, oportunidades e decisões."
       />
       <Card>
-        <form action={generateReport}>
+        <form className="form-cols" action={generateReport}>
           <Field>
             <Label>Título do relatório</Label>
             <Input name="title" placeholder="Ex.: Status de discovery — Sprint 14" />

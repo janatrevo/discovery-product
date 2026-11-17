@@ -50,7 +50,7 @@ export default async function ObservationDetailPage({
   ];
 
   return (
-    <div className="max-w-5xl space-y-4">
+    <div className="page-masonry">
       <Card>
         <PageHeader
           title={obs.title}

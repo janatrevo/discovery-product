@@ -32,7 +32,7 @@ export default async function UsabilityTestDetailPage({ params }: { params: Prom
   const canEdit = role !== "viewer";
 
   return (
-    <div className="max-w-4xl space-y-4">
+    <div className="page-masonry">
       <PageHeader title={test.title} description={test.task ?? undefined} />
       <SimulationBanner mode="image" />
 

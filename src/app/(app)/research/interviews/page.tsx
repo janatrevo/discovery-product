@@ -20,7 +20,7 @@ export default async function InterviewGuidesPage() {
   const countFor = (guideId: string) => interviewCounts.find((c) => c.guideId === guideId)?.count ?? 0;
 
   return (
-    <div className="max-w-3xl">
+    <div>
       <PageHeader
         title="Roteiros de entrevista"
         description="Pesquisa qualitativa — cada roteiro guarda as entrevistas realizadas, transcrições e codificação (sugerida por IA, sempre confirmada por humano antes de contar como padrão)."
@@ -36,7 +36,7 @@ export default async function InterviewGuidesPage() {
           }
         />
       ) : (
-        <div className="space-y-2">
+        <div className="card-grid">
           {list.map((g) => (
             <Link key={g.id} href={`/research/interviews/${g.id}`}>
               <Card className="hover:shadow-md">

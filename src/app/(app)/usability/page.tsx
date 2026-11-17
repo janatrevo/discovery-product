@@ -15,7 +15,7 @@ export default async function UsabilityTestsPage() {
   const hypothesisTitle = (id: string | null) => hypothesisList.find((h) => h.id === id)?.title;
 
   return (
-    <div className="max-w-3xl">
+    <div>
       <PageHeader
         title="Usabilidade / Image Test Studio"
         description="Análise de screenshots, wireframes e protótipos por IA a partir da perspectiva de uma persona — sempre marcada como simulação, nunca como teste com usuário real."
@@ -32,7 +32,7 @@ export default async function UsabilityTestsPage() {
           }
         />
       ) : (
-        <div className="mt-4 space-y-2">
+        <div className="card-grid">
           {list.map((t) => (
             <Link key={t.id} href={`/usability/${t.id}`}>
               <Card className="hover:shadow-md">

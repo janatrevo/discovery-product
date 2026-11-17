@@ -55,7 +55,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
     `Hipóteses continuam existindo, só perdem o vínculo com este produto.\n\nEssa ação não pode ser desfeita.`;
 
   return (
-    <div className="max-w-3xl">
+    <div className="page-masonry">
       <PageHeader
         title={product.name}
         description={product.description ?? undefined}

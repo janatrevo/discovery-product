@@ -6,7 +6,7 @@ export default function NewProjectPage() {
     <div className="max-w-lg">
       <PageHeader title="Novo projeto" description="Fluxo 1 — criar um novo espaço de discovery." />
       <Card>
-        <form action={createProject}>
+        <form className="form-cols" action={createProject}>
           <Field>
             <Label>Nome do projeto</Label>
             <Input name="name" required />

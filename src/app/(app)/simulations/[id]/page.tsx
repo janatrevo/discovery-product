@@ -74,7 +74,7 @@ export default async function SimulationDetailPage({ params }: { params: Promise
   const gridClass = `grid grid-cols-1 gap-4 ${isPanel ? PANEL_GRID_COLS[Math.min(personaList.length, 3)] : ""}`;
 
   return (
-    <div className="max-w-6xl space-y-4">
+    <div className="page-masonry">
       <PageHeader
         title={isPanel ? "Painel multi-persona" : "Resultado da simulação"}
         description={run.scenario ?? undefined}

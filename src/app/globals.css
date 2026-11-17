@@ -49,3 +49,61 @@ body {
 .origin-badge-simulation {
   @apply inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-900 ring-1 ring-amber-400;
 }
+
+
+/* ------------------------------------------------------------------
+   Premissa de layout: as telas usam a largura toda da janela (sem max-w
+   fixo na raiz da página) e se reorganizam por breakpoint. Três ajudas:
+   - .card-grid    lista de cards em colunas automáticas (1 em celular, 2, 3... em telas largas)
+   - .page-masonry pilha de cards de detalhe vira 2 colunas a partir de 1280px; o PageHeader
+                   ocupa a largura inteira (.page-span)
+   - .form-cols    formulário em 2 colunas a partir de 1024px; textarea e blocos
+                   que não são <Field> ocupam a linha inteira
+   Ver AGENTS.md > "Layout".
+------------------------------------------------------------------ */
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));
+  gap: 0.75rem;
+}
+.card-grid > a {
+  display: block;
+  min-width: 0;
+}
+.card-grid > a > div {
+  height: 100%;
+}
+
+.page-masonry > * {
+  min-width: 0;
+}
+.page-masonry > :not(.page-span) {
+  margin-bottom: 1rem;
+}
+@media (min-width: 1280px) {
+  .page-masonry {
+    column-count: 2;
+    column-gap: 1rem;
+  }
+  .page-masonry > * {
+    break-inside: avoid;
+  }
+  .page-masonry > .page-span {
+    column-span: all;
+  }
+}
+
+.form-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  column-gap: 1.5rem;
+}
+@media (min-width: 1024px) {
+  .form-cols {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .form-cols > :not(.mb-3),
+  .form-cols > .mb-3:has(textarea) {
+    grid-column: 1 / -1;
+  }
+}

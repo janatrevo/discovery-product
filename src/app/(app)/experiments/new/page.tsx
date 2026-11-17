@@ -121,7 +121,7 @@ export default async function NewExperimentPage({
   const typeInfo = HYPOTHESIS_TYPES.find((t) => t.value === hyp.type);
 
   return (
-    <div className="max-w-2xl">
+    <div>
       <PageHeader title="Novo experimento" description={`Para a hipótese: ${hyp.title}`} />
 
       <Card className="mb-4 bg-indigo-50">
@@ -142,7 +142,7 @@ export default async function NewExperimentPage({
       </Card>
 
       <Card>
-        <form action={createExperiment.bind(null, hypothesisId)}>
+        <form className="form-cols" action={createExperiment.bind(null, hypothesisId)}>
           <ExperimentMethodFields
             methods={Object.entries(EXPERIMENT_METHOD_LABELS).map(([value, label]) => ({ value, label }))}
             defaultMethod={recommendations[0]?.method ?? "interview"}

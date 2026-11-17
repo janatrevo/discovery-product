@@ -23,7 +23,7 @@ export default async function EditHypothesisPage({ params }: { params: Promise<{
   return (
     <div>
       <PageHeader title={`Editar: ${hyp.title}`} />
-      <form action={updateHypothesis.bind(null, id)} className="max-w-3xl">
+      <form action={updateHypothesis.bind(null, id)}>
         <HypothesisFormFields
           defaultValues={hyp}
           personaOptions={personaOptions}

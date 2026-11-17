@@ -1,8 +1,7 @@
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/current-user";
 import { listUserProjects, getCurrentProject } from "@/lib/current-project";
-import { Sidebar } from "@/components/sidebar";
-import { TopBar } from "@/components/topbar";
+import { AppShell } from "@/components/app-shell";
 import { ProductTourProvider } from "@/components/product-tour";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -16,13 +15,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <ProductTourProvider>
-      <div className="flex h-screen overflow-clip bg-slate-50">
-        <Sidebar />
-        <div className="flex min-w-0 flex-1 flex-col">
-          <TopBar user={user} projects={projectsList} current={current} />
-          <main className="relative min-h-0 flex-1 overflow-y-auto p-6">{children}</main>
-        </div>
-      </div>
+      <AppShell user={user} projects={projectsList} current={current}>
+        {children}
+      </AppShell>
     </ProductTourProvider>
   );
 }

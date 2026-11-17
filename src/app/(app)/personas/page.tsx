@@ -39,7 +39,7 @@ export default async function PersonasPage() {
           }
         />
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
           {list.map((p) => (
             <Link key={p.id} href={`/personas/${p.id}`}>
               <Card className="h-full transition-shadow hover:shadow-md">

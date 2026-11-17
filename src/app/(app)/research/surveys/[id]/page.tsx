@@ -86,7 +86,7 @@ export default async function SurveyBuilderPage({ params }: { params: Promise<{ 
     : [];
 
   return (
-    <div className="max-w-3xl space-y-4">
+    <div className="page-masonry">
       <PageHeader
         title={survey.title}
         description={survey.objective ?? undefined}

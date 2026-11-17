@@ -16,7 +16,7 @@ export default async function NewObservationPage({ params }: { params: Promise<{
   if (role === "viewer") notFound();
 
   return (
-    <div className="max-w-2xl space-y-4">
+    <div className="page-masonry">
       <PageHeader
         title="Novo registro de observação"
         description="Uma conversa ou observação no local. Pode ter gravação e transcrição, ou só anotações."

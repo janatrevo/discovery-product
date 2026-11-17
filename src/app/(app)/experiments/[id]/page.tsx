@@ -95,7 +95,7 @@ export default async function ExperimentDetailPage({ params }: { params: Promise
     linkedGuides.length > 0;
 
   return (
-    <div className="max-w-2xl space-y-4">
+    <div className="page-masonry">
       <PageHeader
         title={`Experimento — ${experimentMethodLabel(exp.method)}`}
         description={hyp ? `Hipótese: ${hyp.title}` : undefined}

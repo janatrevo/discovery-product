@@ -19,7 +19,7 @@ export default async function EditPersonaPage({ params }: { params: Promise<{ id
   return (
     <div>
       <PageHeader title={`Editar: ${persona.name}`} />
-      <form action={boundUpdate} className="max-w-3xl">
+      <form action={boundUpdate}>
         <PersonaFormFields defaultValues={persona} products={productList} />
         <div className="mt-6 flex gap-2">
           <Button type="submit">Salvar alterações</Button>

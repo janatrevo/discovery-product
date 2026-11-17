@@ -88,7 +88,7 @@ export default async function ProductDocPage({
   const unconfirmedCount = stories.filter((s) => s.aiGenerated && !s.confirmed).length;
 
   return (
-    <div className="max-w-7xl space-y-4">
+    <div className="space-y-4">
       <PageHeader
         title={`PRD & User Stories — ${opp.title}`}
         description="Rascunho estruturado ligado ao que já foi validado nesta oportunidade — nunca substitui a revisão humana antes de ir para engenharia."

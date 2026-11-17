@@ -48,7 +48,7 @@ export default async function RepositoryPage({
   const types = [...new Set(list.map((e) => e.type))];
 
   return (
-    <div className="max-w-4xl">
+    <div>
       <PageHeader
         title="Research Repository"
         description="Todas as evidências do projeto em um só lugar — origem, persona, e a quais hipóteses cada uma está vinculada. Simulações de IA aparecem marcadas, nunca disfarçadas de dado real."
@@ -134,7 +134,7 @@ export default async function RepositoryPage({
           description="Evidências aparecem aqui automaticamente ao serem adicionadas a uma hipótese, ou capturadas via entrevistas, surveys e testes de usabilidade."
         />
       ) : (
-        <div className="space-y-2">
+        <div className="card-grid">
           {filtered.map((e) => (
             <Card key={e.id}>
               <div className="flex items-start justify-between gap-3">

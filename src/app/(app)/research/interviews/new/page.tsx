@@ -11,7 +11,7 @@ export default async function NewGuidePage({
     <div className="max-w-lg">
       <PageHeader title="Novo roteiro de entrevista" />
       <Card>
-        <form action={createGuide}>
+        <form className="form-cols" action={createGuide}>
           <input type="hidden" name="hypothesisId" value={hypothesisId ?? ""} />
           <Field>
             <Label>Título</Label>

@@ -6,7 +6,7 @@ export default function NewProductPage() {
   return (
     <div>
       <PageHeader title="Novo produto / conceito" />
-      <form action={createProduct} className="max-w-3xl">
+      <form action={createProduct}>
         <ProductFormFields />
         <div className="mt-6 flex gap-2">
           <Button type="submit">Criar</Button>

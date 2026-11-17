@@ -30,13 +30,13 @@ export default async function NewOpportunityPage({
   const knownTags = [...new Set(tagRows.flatMap((r) => r.tags ?? []))].sort((a, b) => a.localeCompare(b, "pt-BR", { numeric: true }));
 
   return (
-    <div className="max-w-2xl">
+    <div>
       <PageHeader
         title="Nova oportunidade"
         description="Vincule a uma hipótese sempre que possível — a confiança de evidência dela entra automaticamente no cálculo de priorização."
       />
       <Card>
-        <form action={createOpportunity}>
+        <form className="form-cols" action={createOpportunity}>
           <Field>
             <Label>Título</Label>
             <Input name="title" required placeholder="Ex.: Reduzir fricção no checkout para PMEs" />

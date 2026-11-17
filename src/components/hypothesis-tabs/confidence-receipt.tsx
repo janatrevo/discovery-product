@@ -52,6 +52,7 @@ export function ConfidenceReceiptCard({ hypothesis }: { hypothesis: Hypothesis }
                 ))}
               </div>
             )}
+            <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="text-slate-400">
@@ -80,6 +81,7 @@ export function ConfidenceReceiptCard({ hypothesis }: { hypothesis: Hypothesis }
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         </details>
       )}

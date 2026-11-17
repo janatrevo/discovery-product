@@ -14,7 +14,7 @@ export function PersonaFormFields({
 }) {
   const d = defaultValues;
   return (
-    <div className="space-y-4">
+    <div className="page-masonry">
       <Card>
         <p className="mb-3 text-sm font-semibold text-slate-700">Essencial</p>
         <Field>

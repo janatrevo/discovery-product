@@ -30,7 +30,7 @@ export default async function NewDecisionPage({
   ]);
 
   return (
-    <div className="max-w-2xl">
+    <div>
       <PageHeader
         title="Registrar decisão"
         description="O log de decisões é append-only: uma vez registrada, a decisão não é apagada — apenas novas decisões substituem o rumo. É obrigatório referenciar hipótese e/ou evidência, a menos que você marque explicitamente que está sobrepondo a metodologia recomendada."
@@ -41,7 +41,7 @@ export default async function NewDecisionPage({
             Não foi possível registrar a decisão: {error}
           </p>
         )}
-        <form action={createDecision}>
+        <form className="form-cols" action={createDecision}>
           <Field>
             <Label>O que foi decidido</Label>
             <Textarea name="decisionText" rows={2} required defaultValue={decisionText ?? ""} placeholder="Ex.: Vamos priorizar o fluxo de onboarding simplificado no próximo ciclo." />

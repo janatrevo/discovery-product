@@ -149,7 +149,7 @@ export default async function HypothesisWorkspacePage({
   const canManage = canDelete; // Owner/Editor: desvincular e excluir itens dentro de cada seção
 
   return (
-    <div className="max-w-7xl">
+    <div>
       <PageHeader
         title={hyp.title}
         description={typeInfo ? `${typeInfo.label} — ${typeInfo.hint}` : hyp.type}

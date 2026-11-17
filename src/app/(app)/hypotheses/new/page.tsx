@@ -17,7 +17,7 @@ export default async function NewHypothesisPage() {
   return (
     <div>
       <PageHeader title="Nova hipótese" description="A entidade central da plataforma — tudo se conecta a ela." />
-      <form action={createHypothesis} className="max-w-3xl">
+      <form action={createHypothesis}>
         <HypothesisFormFields
           personaOptions={personaOptions}
           productOptions={productOptions}

@@ -89,7 +89,7 @@ export default async function PersonaDetailPage({ params }: { params: Promise<{ 
   const canDeleteNow = canDelete && !hasBlockers;
 
   return (
-    <div className="max-w-3xl">
+    <div className="page-masonry">
       <PageHeader
         title={persona.jobTitle ? `${persona.name} — ${persona.jobTitle}` : persona.name}
         description={persona.shortDescription ?? undefined}
