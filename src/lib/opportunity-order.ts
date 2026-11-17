@@ -51,3 +51,46 @@ export function groupOpportunitiesByPhase<T extends { title: string }>(
   }
   return groups;
 }
+
+// Agrupamento do roadmap da hipótese: por "[Fase N]" no título (legado) ou, quando não
+// há prefixo, pela tag de módulo ("Módulo 3 · Mensageria e voz") ou de fase ("Fase 2").
+// Quem não tem nenhum dos dois cai em "Sem módulo", no fim.
+const MODULE_TAG_RE = /^\s*m[óo]dulo\s*(\d+)\s*(?:[·\-–:]\s*(.+))?$/i;
+const PHASE_TAG_RE = /^\s*fase\s*(\d+)\s*$/i;
+
+export type RoadmapGroup<T> = { key: string; label: string; sub?: string; order: number; items: T[] };
+
+function groupInfo(item: { title: string; tags?: string[] | null }): { key: string; label: string; sub?: string; order: number } {
+  const p = phaseOf(item.title);
+  if (p !== null) return { key: `fase-${p}`, label: `Fase ${p}`, sub: PHASE_NAMES[p], order: p };
+  for (const tag of item.tags ?? []) {
+    const m = MODULE_TAG_RE.exec(tag);
+    if (m) return { key: `modulo-${Number(m[1])}`, label: `Módulo ${Number(m[1])}`, sub: m[2]?.trim(), order: Number(m[1]) };
+  }
+  for (const tag of item.tags ?? []) {
+    const m = PHASE_TAG_RE.exec(tag);
+    if (m) return { key: `fase-${Number(m[1])}`, label: `Fase ${Number(m[1])}`, sub: PHASE_NAMES[Number(m[1])], order: Number(m[1]) };
+  }
+  return { key: "sem", label: "Sem módulo", order: 999 };
+}
+
+export function groupOpportunitiesForRoadmap<T extends { title: string; tags?: string[] | null }>(items: T[]): RoadmapGroup<T>[] {
+  const map = new Map<string, RoadmapGroup<T>>();
+  for (const it of items) {
+    const g = groupInfo(it);
+    const existing = map.get(g.key);
+    if (existing) {
+      existing.items.push(it);
+      if (!existing.sub && g.sub) existing.sub = g.sub;
+    } else {
+      map.set(g.key, { ...g, items: [it] });
+    }
+  }
+  const groups = [...map.values()].sort((a, b) => a.order - b.order);
+  for (const g of groups) {
+    g.items.sort((a, b) =>
+      titleWithoutPhase(a.title).localeCompare(titleWithoutPhase(b.title), "pt-BR", { sensitivity: "base", numeric: true })
+    );
+  }
+  return groups;
+}

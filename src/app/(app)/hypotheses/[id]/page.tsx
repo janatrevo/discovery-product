@@ -23,12 +23,8 @@ import { STATUS_LABELS, STATUS_COLORS, HYPOTHESIS_TYPES } from "@/lib/hypothesis
 import { deleteHypothesis, overrideStatus, clearOverride } from "../actions";
 import { checkHypothesisDeletable } from "@/lib/delete-guards";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
-import { deleteExperiment } from "../../experiments/actions";
 import { unlinkHypothesisFromOpportunity } from "../../opportunities/actions";
-import { unlinkHypothesisFromSurvey } from "../../research/surveys/actions";
-import { unlinkHypothesisFromGuide } from "../../research/interviews/actions";
-import { unlinkHypothesisFromTest, unlinkHypothesisFromFinding } from "../../usability/actions";
-import { unlinkHypothesisFromSimulation } from "../../simulations/actions";
+import { unlinkHypothesisFromFinding } from "../../usability/actions";
 import { EvidenceTab } from "@/components/hypothesis-tabs/evidence-tab";
 import { ConfidenceReceiptCard } from "@/components/hypothesis-tabs/confidence-receipt";
 import { ExperimentsMiniList } from "@/components/hypothesis-tabs/experiments-mini";
@@ -36,7 +32,6 @@ import { SimulationsMiniList } from "@/components/hypothesis-tabs/simulations-mi
 import { ResearchMiniList } from "@/components/hypothesis-tabs/research-mini";
 import { HypothesisAiAnalysisCard } from "@/components/hypothesis-tabs/ai-analysis-card";
 import { surveysForHypothesis, guidesForHypothesis } from "@/lib/research-links";
-import { groupOpportunitiesByPhase } from "@/lib/opportunity-order";
 import { RoadmapCard } from "@/components/hypothesis-tabs/roadmap-card";
 
 // A análise por IA lê todas as pesquisas e pode levar quase um minuto.
@@ -96,16 +91,14 @@ export default async function HypothesisWorkspacePage({
       .from(hypothesisProducts)
       .innerJoin(products, eq(products.id, hypothesisProducts.productId))
       .where(eq(hypothesisProducts.hypothesisId, id)),
-    canDelete ? db.select().from(experiments).where(eq(experiments.hypothesisId, id)) : Promise.resolve([]),
-    canDelete ? db.select().from(opportunities).where(eq(opportunities.hypothesisId, id)) : Promise.resolve([]),
-    canDelete ? surveysForHypothesis(id) : Promise.resolve([]),
-    canDelete ? guidesForHypothesis(id) : Promise.resolve([]),
-    canDelete ? db.select().from(usabilityTests).where(eq(usabilityTests.hypothesisId, id)) : Promise.resolve([]),
-    canDelete ? db.select().from(usabilityFindings).where(eq(usabilityFindings.hypothesisId, id)) : Promise.resolve([]),
-    canDelete ? db.select().from(simulationRuns).where(eq(simulationRuns.hypothesisId, id)) : Promise.resolve([]),
-    canDelete
-      ? db.select().from(decisions).where(sql`${decisions.hypothesisRefs} @> ${JSON.stringify([id])}::jsonb`)
-      : Promise.resolve([]),
+    db.select().from(experiments).where(eq(experiments.hypothesisId, id)),
+    db.select({ id: opportunities.id }).from(opportunities).where(eq(opportunities.hypothesisId, id)),
+    surveysForHypothesis(id),
+    guidesForHypothesis(id),
+    db.select({ id: usabilityTests.id }).from(usabilityTests).where(eq(usabilityTests.hypothesisId, id)),
+    db.select().from(usabilityFindings).where(eq(usabilityFindings.hypothesisId, id)),
+    db.select({ id: simulationRuns.id }).from(simulationRuns).where(eq(simulationRuns.hypothesisId, id)),
+    db.select().from(decisions).where(sql`${decisions.hypothesisRefs} @> ${JSON.stringify([id])}::jsonb`),
   ]);
 
   // "Hipótese relacionada" é um link de verdade pra outra hipótese do
@@ -130,7 +123,6 @@ export default async function HypothesisWorkspacePage({
     blockingGuides.length > 0 && `${blockingGuides.length} roteiro(s) de entrevista`,
     blockingFindings.length > 0 && `${blockingFindings.length} achado(s) de usabilidade`,
   ].filter(Boolean) as string[];
-  const hasLinked = canDelete && (willDelete.length > 0 || willUnlink.length > 0 || blockingDecisions.length > 0);
   const canDeleteNow = canDelete && !hasBlockers;
   const confirmMessage =
     `Excluir esta hipótese?\n\n` +
@@ -140,8 +132,24 @@ export default async function HypothesisWorkspacePage({
 
   const typeInfo = HYPOTHESIS_TYPES.find((t) => t.value === hyp.type);
 
+  const researchCount = blockingSurveys.length + blockingGuides.length;
+  const simulationCount = blockingSimulations.length + blockingTests.length;
+  const tabCounts: Record<string, number> = {
+    research: researchCount,
+    experiments: blockingExperiments.length,
+    simulations: simulationCount,
+  };
+  const linkChips = [
+    { label: "oportunidades", n: blockingOpportunities.length, href: `/hypotheses/${id}#oportunidades` },
+    { label: "experimentos", n: blockingExperiments.length, href: `/hypotheses/${id}?tab=experiments` },
+    { label: "surveys e entrevistas", n: researchCount, href: `/hypotheses/${id}?tab=research` },
+    { label: "simulações e testes", n: simulationCount, href: `/hypotheses/${id}?tab=simulations` },
+    { label: "decisões", n: blockingDecisions.length, href: `/hypotheses/${id}#decisoes` },
+  ].filter((c) => c.n > 0);
+  const canManage = canDelete; // Owner/Editor: desvincular e excluir itens dentro de cada seção
+
   return (
-    <div className="max-w-4xl">
+    <div className="max-w-7xl">
       <PageHeader
         title={hyp.title}
         description={typeInfo ? `${typeInfo.label} — ${typeInfo.hint}` : hyp.type}
@@ -166,348 +174,219 @@ export default async function HypothesisWorkspacePage({
         }
       />
 
-      {linkedProducts.length > 0 && (
-        <div className="mb-4 flex flex-wrap items-center gap-2">
-          <span className="text-xs font-medium uppercase tracking-wide text-slate-400">Produto:</span>
-          {linkedProducts.map((p) => (
-            <Link key={p.product.id} href={`/products/${p.product.id}`}>
-              <Badge color="indigo">{p.product.name}</Badge>
-            </Link>
-          ))}
-        </div>
-      )}
-
-      {hasLinked && (
-        <Card className="mb-4 border-amber-300 bg-amber-50">
-          <details open={hasBlockers}>
-            <summary className="cursor-pointer list-none">
-              <span className="flex items-start justify-between gap-3">
-                <span className="min-w-0">
-                  <span className="block text-sm font-medium text-amber-900">
-                    {hasBlockers ? "Esta hipótese não pode ser excluída" : "O que acontece se você excluir esta hipótese"}
-                  </span>
-                  <span className="mt-1 block text-sm text-amber-800">
-            {hasBlockers ? (
-              <>{blockReasons.join(". ")}.</>
-            ) : (
-              <>
-                {willDelete.length > 0 && <>Serão apagados junto: {willDelete.join(", ")}. </>}
-                {willUnlink.length > 0 && <>Serão apenas desvinculados: {willUnlink.join(", ")}. </>}
-                Personas, evidências e entrevistas continuam existindo. Você pode, se preferir, tirar itens um a um (veja os detalhes).
-              </>
-            )}
-                  </span>
-                </span>
-                <span className="shrink-0 text-xs font-medium text-amber-800 underline">Ver detalhes e desvincular itens</span>
-              </span>
-            </summary>
-            <div className="mt-2">
-
-          {blockingExperiments.length > 0 && (
-            <div className="mt-3">
-              <p className="text-xs font-semibold uppercase text-amber-700">
-                Experimentos ({blockingExperiments.length})
-              </p>
-              <div className="mt-1 space-y-2">
-                {blockingExperiments.map((e) => (
-                  <div key={e.id} className="flex items-center justify-between gap-2 rounded-md border border-amber-200 bg-white px-3 py-2">
-                    <Link href={`/experiments/${e.id}`} className="min-w-0 flex-1">
-                      <p className="truncate text-sm text-slate-800">{e.objective || "Experimento sem objetivo definido"}</p>
-                    </Link>
-                    <form action={deleteExperiment.bind(null, e.id, `/hypotheses/${id}`)}>
-                      <Button type="submit" variant="ghost" size="sm">
-                        excluir experimento
-                      </Button>
-                    </form>
-                  </div>
-                ))}
-              </div>
-              <p className="mt-1 text-xs text-amber-700">
-                Experimentos exigem uma hipótese — não dá pra desvincular, só excluir o experimento inteiro (isso acontece junto com a hipótese).
-              </p>
-            </div>
-          )}
-
-          {blockingOpportunities.length > 0 && (
-            <div className="mt-3">
-              <p className="text-xs font-semibold uppercase text-amber-700">
-                Oportunidades ({blockingOpportunities.length})
-              </p>
-              {groupOpportunitiesByPhase(blockingOpportunities).map((g) => (
-                <div key={g.label} className="mt-2">
-                  <p className="text-xs font-medium text-amber-800">
-                    {g.label} · {g.items.length}
-                  </p>
-                  <div className="mt-1 space-y-2">
-                    {g.items.map((o) => (
-                      <div key={o.id} className="flex items-center justify-between gap-2 rounded-md border border-amber-200 bg-white px-3 py-2">
-                        <Link href={`/opportunities/${o.id}`} className="min-w-0 flex-1">
-                          <p className="truncate text-sm text-slate-800">{o.title}</p>
-                        </Link>
-                        <form action={unlinkHypothesisFromOpportunity.bind(null, o.id, id)}>
-                          <Button type="submit" variant="ghost" size="sm">
-                            desvincular
-                          </Button>
-                        </form>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+      {(linkedProducts.length > 0 || linkChips.length > 0) && (
+        <div className="mb-4 flex flex-wrap items-center gap-x-6 gap-y-2">
+          {linkedProducts.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-medium uppercase tracking-wide text-slate-400">Produto</span>
+              {linkedProducts.map((p) => (
+                <Link key={p.product.id} href={`/products/${p.product.id}`}>
+                  <Badge color="indigo">{p.product.name}</Badge>
+                </Link>
               ))}
             </div>
           )}
-
-          {blockingSurveys.length > 0 && (
-            <div className="mt-3">
-              <p className="text-xs font-semibold uppercase text-amber-700">
-                Surveys ({blockingSurveys.length})
-              </p>
-              <div className="mt-1 space-y-2">
-                {blockingSurveys.map((s) => (
-                  <div key={s.id} className="flex items-center justify-between gap-2 rounded-md border border-amber-200 bg-white px-3 py-2">
-                    <Link href={`/research/surveys/${s.id}`} className="min-w-0 flex-1">
-                      <p className="truncate text-sm text-slate-800">{s.title}</p>
-                    </Link>
-                    <form action={unlinkHypothesisFromSurvey.bind(null, s.id, id)}>
-                      <Button type="submit" variant="ghost" size="sm">
-                        desvincular
-                      </Button>
-                    </form>
-                  </div>
-                ))}
-              </div>
+          {linkChips.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-medium uppercase tracking-wide text-slate-400">Vinculados</span>
+              {linkChips.map((c) => (
+                <Link
+                  key={c.label}
+                  href={c.href}
+                  className="rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-xs text-slate-600 hover:border-indigo-300 hover:text-indigo-700"
+                >
+                  <strong className="font-semibold text-slate-800">{c.n}</strong> {c.label}
+                </Link>
+              ))}
             </div>
           )}
-
-          {blockingGuides.length > 0 && (
-            <div className="mt-3">
-              <p className="text-xs font-semibold uppercase text-amber-700">
-                Roteiros de entrevista ({blockingGuides.length})
-              </p>
-              <div className="mt-1 space-y-2">
-                {blockingGuides.map((g) => (
-                  <div key={g.id} className="flex items-center justify-between gap-2 rounded-md border border-amber-200 bg-white px-3 py-2">
-                    <Link href={`/research/interviews/${g.id}`} className="min-w-0 flex-1">
-                      <p className="truncate text-sm text-slate-800">{g.title}</p>
-                    </Link>
-                    <form action={unlinkHypothesisFromGuide.bind(null, g.id, id)}>
-                      <Button type="submit" variant="ghost" size="sm">
-                        desvincular
-                      </Button>
-                    </form>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {blockingTests.length > 0 && (
-            <div className="mt-3">
-              <p className="text-xs font-semibold uppercase text-amber-700">
-                Testes de usabilidade ({blockingTests.length})
-              </p>
-              <div className="mt-1 space-y-2">
-                {blockingTests.map((t) => (
-                  <div key={t.id} className="flex items-center justify-between gap-2 rounded-md border border-amber-200 bg-white px-3 py-2">
-                    <Link href={`/usability/${t.id}`} className="min-w-0 flex-1">
-                      <p className="truncate text-sm text-slate-800">{t.title}</p>
-                    </Link>
-                    <form action={unlinkHypothesisFromTest.bind(null, t.id, id)}>
-                      <Button type="submit" variant="ghost" size="sm">
-                        desvincular
-                      </Button>
-                    </form>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {blockingFindings.length > 0 && (
-            <div className="mt-3">
-              <p className="text-xs font-semibold uppercase text-amber-700">
-                Achados de usabilidade ({blockingFindings.length})
-              </p>
-              <div className="mt-1 space-y-2">
-                {blockingFindings.map((f) => (
-                  <div key={f.id} className="flex items-center justify-between gap-2 rounded-md border border-amber-200 bg-white px-3 py-2">
-                    <Link href={`/usability/${f.usabilityTestId}`} className="min-w-0 flex-1">
-                      <p className="truncate text-sm text-slate-800">{f.problem}</p>
-                    </Link>
-                    <form action={unlinkHypothesisFromFinding.bind(null, f.id, id)}>
-                      <Button type="submit" variant="ghost" size="sm">
-                        desvincular
-                      </Button>
-                    </form>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {blockingSimulations.length > 0 && (
-            <div className="mt-3">
-              <p className="text-xs font-semibold uppercase text-amber-700">
-                Simulações ({blockingSimulations.length})
-              </p>
-              <div className="mt-1 space-y-2">
-                {blockingSimulations.map((s) => (
-                  <div key={s.id} className="flex items-center justify-between gap-2 rounded-md border border-amber-200 bg-white px-3 py-2">
-                    <Link href={`/simulations/${s.id}`} className="min-w-0 flex-1">
-                      <p className="truncate text-sm text-slate-800">{s.scenario || "Cenário sem título"}</p>
-                    </Link>
-                    <form action={unlinkHypothesisFromSimulation.bind(null, s.id, id)}>
-                      <Button type="submit" variant="ghost" size="sm">
-                        desvincular
-                      </Button>
-                    </form>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {blockingDecisions.length > 0 && (
-            <div className="mt-3">
-              <p className="text-xs font-semibold uppercase text-amber-700">
-                Decisões que citam esta hipótese ({blockingDecisions.length})
-              </p>
-              <div className="mt-1 space-y-2">
-                {blockingDecisions.map((d) => (
-                  <Link
-                    key={d.id}
-                    href={`/decisions/${d.id}`}
-                    className="block rounded-md border border-amber-200 bg-white px-3 py-2"
-                  >
-                    <p className="truncate text-sm text-slate-800">{d.decisionText}</p>
-                  </Link>
-                ))}
-              </div>
-              <p className="mt-1 text-xs text-amber-700">
-                Decisões já registradas nunca podem ser desvinculadas — é histórico imutável do Decision Log.
-                Enquanto essas decisões existirem, esta hipótese não pode ser excluída.
-              </p>
-            </div>
-          )}
-            </div>
-          </details>
-        </Card>
+        </div>
       )}
 
-      <div className="mb-5 flex gap-1 border-b border-slate-200">
+      {canDelete && hasBlockers && (
+        <p className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          Esta hipótese não pode ser excluída: ela aparece em decisões do Decision Log, que são histórico imutável
+          {blockingDecisions.length > 0 && (
+            <>
+              {" "}
+              (<Link href={`/hypotheses/${id}#decisoes`} className="underline">ver decisões</Link>)
+            </>
+          )}
+          .
+        </p>
+      )}
+
+      <div className="mb-5 flex gap-1 overflow-x-auto border-b border-slate-200">
         {TABS.map((t) => (
           <Link
             key={t.key}
             href={`/hypotheses/${id}?tab=${t.key}`}
             className={clsx(
-              "px-3 py-2 text-sm font-medium",
+              "whitespace-nowrap px-3 py-2 text-sm font-medium",
               tab === t.key
                 ? "border-b-2 border-indigo-600 text-indigo-700"
                 : "text-slate-500 hover:text-slate-700"
             )}
           >
             {t.label}
+            {tabCounts[t.key] > 0 && (
+              <span className="ml-1.5 rounded-full bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-600">
+                {tabCounts[t.key]}
+              </span>
+            )}
           </Link>
         ))}
       </div>
 
       {tab === "overview" && (
-        <div className="space-y-4">
-          {hyp.description && (
-            <Card>
-              <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Descrição</p>
-              <p className="mt-1 text-sm text-slate-700">{hyp.description}</p>
-            </Card>
-          )}
+        <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-3">
+          <div className="space-y-4 lg:col-span-2">
+            {hyp.description && (
+              <Card>
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Descrição</p>
+                <p className="mt-1 text-sm text-slate-700">{hyp.description}</p>
+              </Card>
+            )}
 
-          <ConfidenceReceiptCard hypothesis={hyp} />
-
-          <RoadmapCard hypothesisId={id} />
-
-          {(hyp.problemRef || hyp.solutionRef || relatedHyp) && (
-            <Card className="space-y-2">
-              {hyp.problemRef && (
-                <div>
-                  <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Problema relacionado</p>
-                  <p className="text-sm text-slate-700">{hyp.problemRef}</p>
-                </div>
-              )}
-              {hyp.solutionRef && (
-                <div>
-                  <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Solução relacionada</p>
-                  <p className="text-sm text-slate-700">{hyp.solutionRef}</p>
-                </div>
-              )}
-              {relatedHyp && (
-                <div>
-                  <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Hipótese relacionada</p>
-                  <Link href={`/hypotheses/${relatedHyp.id}`} className="text-sm text-indigo-700 hover:underline">
-                    {relatedHyp.title}
-                  </Link>
-                </div>
-              )}
-            </Card>
-          )}
-
-          <Card>
-            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400">Personas & Produtos</p>
-            <div className="flex flex-wrap gap-2">
-              {linkedPersonas.map((p) => (
-                <Link key={p.persona.id} href={`/personas/${p.persona.id}`}>
-                  <Badge color={p.persona.origin === "research_based" ? "emerald" : "amber"}>
-                    {p.persona.name}
-                    {p.persona.jobTitle ? ` — ${p.persona.jobTitle}` : ""}
-                  </Badge>
-                </Link>
-              ))}
-              {linkedProducts.map((p) => (
-                <Link key={p.product.id} href={`/products/${p.product.id}`}>
-                  <Badge color="indigo">{p.product.name}</Badge>
-                </Link>
-              ))}
-              {linkedPersonas.length === 0 && linkedProducts.length === 0 && (
-                <span className="text-sm text-slate-400">Nenhuma persona ou produto vinculado.</span>
-              )}
+            <div id="oportunidades" className="scroll-mt-4">
+              <RoadmapCard hypothesisId={id} unlinkAction={canManage ? unlinkHypothesisFromOpportunity : undefined} />
             </div>
-          </Card>
 
-          {(role === "owner" || role === "editor") && (
-            <Card>
-              <p className="mb-2 text-sm font-semibold text-slate-700">Forçar transição de status (override manual)</p>
-              <p className="mb-3 text-xs text-slate-500">
-                Use apenas quando uma decisão de negócio precisa ignorar a metodologia. Isso fica
-                marcado e visível no relatório e no histórico.
-              </p>
-              <form action={overrideStatus.bind(null, id)} className="flex flex-wrap items-end gap-2">
-                <select name="status" defaultValue={hyp.status} className="rounded-md border border-slate-300 px-2 py-2 text-sm">
-                  {Object.entries(STATUS_LABELS).map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
+            {blockingFindings.length > 0 && (
+              <Card>
+                <p className="mb-2 text-sm font-semibold text-slate-700">
+                  Achados de usabilidade vinculados ({blockingFindings.length})
+                </p>
+                <div className="space-y-2">
+                  {blockingFindings.map((f) => (
+                    <div key={f.id} className="flex items-center justify-between gap-2 rounded-md border border-slate-200 px-3 py-2">
+                      <Link href={`/usability/${f.usabilityTestId}`} className="min-w-0 flex-1">
+                        <p className="truncate text-sm text-slate-800">{f.problem}</p>
+                      </Link>
+                      {canManage && (
+                        <form action={unlinkHypothesisFromFinding.bind(null, f.id, id)}>
+                          <Button type="submit" variant="ghost" size="sm">
+                            desvincular
+                          </Button>
+                        </form>
+                      )}
+                    </div>
                   ))}
-                </select>
-                <input
-                  name="reason"
-                  required
-                  placeholder="Justificativa (obrigatória)"
-                  className="min-w-[220px] flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm"
-                />
-                <Button type="submit" variant="secondary">
-                  Forçar
-                </Button>
-              </form>
-              {hyp.statusOverridden && (
-                <div className="mt-3 rounded-md bg-amber-50 p-3 text-xs text-amber-800">
-                  <strong>Status atual é override manual:</strong> {hyp.statusOverrideReason}
-                  <form action={clearOverride.bind(null, id)} className="mt-2">
-                    <Button type="submit" size="sm" variant="ghost">
-                      Voltar a calcular automaticamente
+                </div>
+              </Card>
+            )}
+          </div>
+
+          <div className="space-y-4">
+            <ConfidenceReceiptCard hypothesis={hyp} />
+
+            {blockingDecisions.length > 0 && (
+              <Card>
+                <div id="decisoes" className="scroll-mt-4">
+                  <p className="mb-2 text-sm font-semibold text-slate-700">
+                    Decisões que citam esta hipótese ({blockingDecisions.length})
+                  </p>
+                  <div className="space-y-2">
+                    {blockingDecisions.map((d) => (
+                      <Link
+                        key={d.id}
+                        href={`/decisions/${d.id}`}
+                        className="block rounded-md border border-slate-200 px-3 py-2 hover:bg-slate-50"
+                      >
+                        <p className="line-clamp-2 text-sm text-slate-800">{d.decisionText}</p>
+                      </Link>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-xs text-slate-500">
+                    Histórico imutável do Decision Log: não dá para desvincular, e enquanto elas existirem a hipótese não
+                    pode ser excluída.
+                  </p>
+                </div>
+              </Card>
+            )}
+
+            {(hyp.problemRef || hyp.solutionRef || relatedHyp) && (
+              <Card className="space-y-2">
+                {hyp.problemRef && (
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Problema relacionado</p>
+                    <p className="text-sm text-slate-700">{hyp.problemRef}</p>
+                  </div>
+                )}
+                {hyp.solutionRef && (
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Solução relacionada</p>
+                    <p className="text-sm text-slate-700">{hyp.solutionRef}</p>
+                  </div>
+                )}
+                {relatedHyp && (
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Hipótese relacionada</p>
+                    <Link href={`/hypotheses/${relatedHyp.id}`} className="text-sm text-indigo-700 hover:underline">
+                      {relatedHyp.title}
+                    </Link>
+                  </div>
+                )}
+              </Card>
+            )}
+
+            <Card>
+              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400">Personas</p>
+              <div className="flex flex-wrap gap-2">
+                {linkedPersonas.map((p) => (
+                  <Link key={p.persona.id} href={`/personas/${p.persona.id}`}>
+                    <Badge color={p.persona.origin === "research_based" ? "emerald" : "amber"}>
+                      {p.persona.name}
+                      {p.persona.jobTitle ? ` — ${p.persona.jobTitle}` : ""}
+                    </Badge>
+                  </Link>
+                ))}
+                {linkedPersonas.length === 0 && <span className="text-sm text-slate-400">Nenhuma persona vinculada.</span>}
+              </div>
+            </Card>
+
+            {(role === "owner" || role === "editor") && (
+              <Card>
+                <details open={hyp.statusOverridden}>
+                  <summary className="cursor-pointer text-sm font-semibold text-slate-700">
+                    Forçar transição de status (override manual)
+                  </summary>
+                  <p className="mb-3 mt-2 text-xs text-slate-500">
+                    Use apenas quando uma decisão de negócio precisa ignorar a metodologia. Isso fica
+                    marcado e visível no relatório e no histórico.
+                  </p>
+                  <form action={overrideStatus.bind(null, id)} className="flex flex-wrap items-end gap-2">
+                    <select name="status" defaultValue={hyp.status} className="rounded-md border border-slate-300 px-2 py-2 text-sm">
+                      {Object.entries(STATUS_LABELS).map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      name="reason"
+                      required
+                      placeholder="Justificativa (obrigatória)"
+                      className="min-w-[160px] flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm"
+                    />
+                    <Button type="submit" variant="secondary">
+                      Forçar
                     </Button>
                   </form>
-                </div>
-              )}
-            </Card>
-          )}
+                  {hyp.statusOverridden && (
+                    <div className="mt-3 rounded-md bg-amber-50 p-3 text-xs text-amber-800">
+                      <strong>Status atual é override manual:</strong> {hyp.statusOverrideReason}
+                      <form action={clearOverride.bind(null, id)} className="mt-2">
+                        <Button type="submit" size="sm" variant="ghost">
+                          Voltar a calcular automaticamente
+                        </Button>
+                      </form>
+                    </div>
+                  )}
+                </details>
+              </Card>
+            )}
+          </div>
         </div>
       )}
 
@@ -520,9 +399,13 @@ export default async function HypothesisWorkspacePage({
         </>
       )}
 
-      {tab === "experiments" && <ExperimentsMiniList hypothesisId={id} projectId={project.id} />}
+      {tab === "experiments" && (
+        <ExperimentsMiniList hypothesisId={id} projectId={project.id} canManage={canManage} />
+      )}
 
-      {tab === "simulations" && <SimulationsMiniList hypothesisId={id} projectId={project.id} />}
+      {tab === "simulations" && (
+        <SimulationsMiniList hypothesisId={id} projectId={project.id} canManage={canManage} />
+      )}
 
       {tab === "history" && <HistoryTab hypothesisId={id} />}
     </div>

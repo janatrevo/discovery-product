@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import Link from "next/link";
-import { groupOpportunitiesByPhase, titleWithoutPhase, PHASE_NAMES } from "@/lib/opportunity-order";
+import { groupOpportunitiesForRoadmap, titleWithoutPhase } from "@/lib/opportunity-order";
 
-export type RoadmapItem = { id: string; title: string; status: string; score: number | null };
+export type RoadmapItem = { id: string; title: string; status: string; score: number | null; tags?: string[] };
 
 const STATUS_LABEL: Record<string, string> = {
   new: "Nova",
@@ -26,10 +26,37 @@ function fmt(n: number | null) {
   return n === null ? "—" : n.toFixed(2);
 }
 
-export function RoadmapView({ items }: { items: RoadmapItem[] }) {
+export function RoadmapView({
+  items,
+  hypothesisId,
+  unlinkAction,
+}: {
+  items: RoadmapItem[];
+  hypothesisId?: string;
+  unlinkAction?: (opportunityId: string, hypothesisId: string) => Promise<void>;
+}) {
   const [view, setView] = useState<"lista" | "colunas">("lista");
-  const groups = groupOpportunitiesByPhase(items);
-  const maxScore = Math.max(0.01, ...items.map((i) => i.score ?? 0));
+  const [manage, setManage] = useState(false);
+  const [hidden, setHidden] = useState<string[]>([]);
+  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [, startTransition] = useTransition();
+  const visibleItems = items.filter((i) => !hidden.includes(i.id));
+  const groups = groupOpportunitiesForRoadmap(visibleItems);
+
+  function unlink(o: RoadmapItem) {
+    if (!unlinkAction || !hypothesisId) return;
+    if (!window.confirm(`Desvincular "${titleWithoutPhase(o.title)}" desta hipótese?\n\nA oportunidade continua existindo, só deixa de estar ligada a ela.`)) return;
+    setPendingId(o.id);
+    startTransition(async () => {
+      try {
+        await unlinkAction(o.id, hypothesisId);
+        setHidden((h) => [...h, o.id]);
+      } finally {
+        setPendingId(null);
+      }
+    });
+  }
+  const maxScore = Math.max(0.01, ...visibleItems.map((i) => i.score ?? 0));
   const avg = (g: RoadmapItem[]) => {
     const withScore = g.filter((x) => x.score !== null) as (RoadmapItem & { score: number })[];
     return withScore.length ? withScore.reduce((a, b) => a + b.score, 0) / withScore.length : null;
@@ -39,17 +66,27 @@ export function RoadmapView({ items }: { items: RoadmapItem[] }) {
     <div>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="text-sm font-semibold text-slate-900">Roadmap · Oportunidades vinculadas</p>
+          <p className="text-sm font-semibold text-slate-900">Oportunidades vinculadas</p>
           <p className="text-xs text-slate-500">
-            {items.length} {items.length === 1 ? "oportunidade" : "oportunidades"} em {groups.length}{" "}
-            {groups.length === 1 ? "grupo" : "grupos"}, ordenadas por fase e depois por nome
+            {visibleItems.length} {visibleItems.length === 1 ? "oportunidade" : "oportunidades"} em {groups.length}{" "}
+            {groups.length === 1 ? "grupo" : "grupos"}, ordenadas por módulo e depois por nome
           </p>
         </div>
+        <div className="flex items-center gap-2">
+        {unlinkAction && (
+          <button
+            type="button"
+            onClick={() => setManage((m) => !m)}
+            className={`rounded-md border px-2.5 py-1 text-xs ${manage ? "border-indigo-300 bg-indigo-50 text-indigo-700" : "border-slate-200 text-slate-500 hover:text-slate-700"}`}
+          >
+            {manage ? "Concluir" : "Gerenciar vínculos"}
+          </button>
+        )}
         <div className="inline-flex rounded-lg bg-slate-100 p-0.5 text-xs">
           {(
             [
-              ["lista", "Lista por fase"],
-              ["colunas", "Colunas por fase"],
+              ["lista", "Lista"],
+              ["colunas", "Colunas"],
             ] as const
           ).map(([key, label]) => (
             <button
@@ -66,25 +103,38 @@ export function RoadmapView({ items }: { items: RoadmapItem[] }) {
             </button>
           ))}
         </div>
+        </div>
       </div>
 
       {view === "lista" ? (
-        <div className="space-y-3">
+        <div className="max-h-[38rem] space-y-3 overflow-y-auto pr-1">
           {groups.map((g) => (
-            <section key={g.label} className="overflow-hidden rounded-lg border border-slate-200">
+            <section key={g.key} className="overflow-hidden rounded-lg border border-slate-200">
               <header className="flex flex-wrap items-center justify-between gap-1 bg-indigo-50 px-3 py-2">
                 <p className="text-sm">
                   <span className="mr-2 font-semibold text-indigo-700">{g.label}</span>
-                  {g.phase !== null && PHASE_NAMES[g.phase] && (
-                    <span className="font-medium text-slate-700">{PHASE_NAMES[g.phase]}</span>
-                  )}
+                  {g.sub && <span className="font-medium text-slate-700">{g.sub}</span>}
                 </p>
                 <p className="text-xs text-slate-500">
                   {g.items.length} {g.items.length === 1 ? "oportunidade" : "oportunidades"}
                   {avg(g.items) !== null && <> · pontuação média {fmt(avg(g.items))}</>}
                 </p>
               </header>
-              {g.items.map((o) => (
+              {g.items.map((o) => manage ? (
+                <div key={o.id} className="flex items-center justify-between gap-3 border-t border-slate-100 px-3 py-2">
+                  <Link href={`/opportunities/${o.id}`} className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800 hover:underline">
+                    {titleWithoutPhase(o.title)}
+                  </Link>
+                  <button
+                    type="button"
+                    disabled={pendingId === o.id}
+                    onClick={() => unlink(o)}
+                    className="shrink-0 rounded-md border border-slate-200 px-2 py-0.5 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    {pendingId === o.id ? "desvinculando..." : "desvincular"}
+                  </button>
+                </div>
+              ) : (
                 <Link
                   key={o.id}
                   href={`/opportunities/${o.id}`}
@@ -111,12 +161,10 @@ export function RoadmapView({ items }: { items: RoadmapItem[] }) {
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {groups.map((g) => (
-            <div key={g.label} className="rounded-lg border border-slate-200 bg-slate-50 p-2">
+            <div key={g.key} className="rounded-lg border border-slate-200 bg-slate-50 p-2">
               <div className="mb-2 flex flex-wrap items-baseline gap-x-2 rounded-md bg-violet-600 px-2.5 py-2 text-white">
                 <span className="text-sm font-semibold">{g.label}</span>
-                {g.phase !== null && PHASE_NAMES[g.phase] && (
-                  <span className="text-xs text-violet-100">{PHASE_NAMES[g.phase]}</span>
-                )}
+                {g.sub && <span className="text-xs text-violet-100">{g.sub}</span>}
                 <span className="ml-auto rounded-full bg-white/20 px-2 text-xs">{g.items.length}</span>
               </div>
               {g.items.map((o) => (
